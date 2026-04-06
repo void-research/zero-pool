@@ -77,16 +77,16 @@ impl Queue {
     }
 
     #[cfg(not(feature = "cas_submission"))]
-    fn notify_workers(&self, mut count: usize) {
+    fn notify_workers(&self, mut remaining: usize) {
         // the added contention of a 'start_from' shared atomic tends to be slower
         // than iterating over the padded atomics array, even if its from the start every time
-        for i in 0..self.threads.len() {
-            if self.local_epochs[i].load(Ordering::SeqCst) == NOT_IN_CRITICAL {
+        for (epoch, thread) in self.local_epochs.iter().zip(self.threads.iter()) {
+            if epoch.load(Ordering::SeqCst) == NOT_IN_CRITICAL {
                 unsafe {
-                    (*self.threads[i].get()).assume_init_ref().unpark();
+                    (*thread.get()).assume_init_ref().unpark();
                 }
-                count -= 1;
-                if count == 0 {
+                remaining -= 1;
+                if remaining == 0 {
                     break;
                 }
             }
@@ -94,12 +94,12 @@ impl Queue {
     }
 
     #[cfg(feature = "cas_submission")]
-    fn notify_workers(&self, mut count: usize) {
+    fn notify_workers(&self, mut remaining: usize) {
         let global_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
 
-        for i in 0..self.threads.len() {
-            if self.local_epochs[i].load(Ordering::SeqCst) == NOT_IN_CRITICAL
-                && self.local_epochs[i]
+        for (epoch, thread) in self.local_epochs.iter().zip(self.threads.iter()) {
+            if epoch.load(Ordering::SeqCst) == NOT_IN_CRITICAL
+                && epoch
                     .compare_exchange(
                         NOT_IN_CRITICAL,
                         global_epoch,
@@ -109,10 +109,10 @@ impl Queue {
                     .is_ok()
             {
                 unsafe {
-                    (*self.threads[i].get()).assume_init_ref().unpark();
+                    (*thread.get()).assume_init_ref().unpark();
                 }
-                count -= 1;
-                if count == 0 {
+                remaining -= 1;
+                if remaining == 0 {
                     break;
                 }
             }
