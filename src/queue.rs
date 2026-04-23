@@ -5,7 +5,7 @@ use crate::{TaskFnPointer, TaskFuture, TaskParamPointer};
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering, fence};
 use std::thread::{self, Thread};
 
 pub const NOT_IN_CRITICAL: usize = usize::MAX;
@@ -76,37 +76,20 @@ impl Queue {
         self.notify_workers(count.min(self.threads.len()));
     }
 
-    #[cfg(not(feature = "cas_submission"))]
-    fn notify_workers(&self, mut remaining: usize) {
-        // the added contention of a 'start_from' shared atomic tends to be slower
-        // than iterating over the padded atomics array, even if its from the start every time
-        for (epoch, thread) in self.local_epochs.iter().zip(self.threads.iter()) {
-            if epoch.load(Ordering::SeqCst) == NOT_IN_CRITICAL {
-                unsafe {
-                    (*thread.get()).assume_init_ref().unpark();
-                }
-                remaining -= 1;
-                if remaining == 0 {
-                    break;
-                }
-            }
-        }
-    }
-
-    #[cfg(feature = "cas_submission")]
     fn notify_workers(&self, mut remaining: usize) {
         let global_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
 
+        fence(Ordering::SeqCst);
+
         for (epoch, thread) in self.local_epochs.iter().zip(self.threads.iter()) {
-            if epoch.load(Ordering::SeqCst) == NOT_IN_CRITICAL
-                && epoch
-                    .compare_exchange(
-                        NOT_IN_CRITICAL,
-                        global_epoch,
-                        Ordering::SeqCst,
-                        Ordering::Relaxed,
-                    )
-                    .is_ok()
+            if epoch
+                .compare_exchange(
+                    NOT_IN_CRITICAL,
+                    global_epoch,
+                    Ordering::Release,
+                    Ordering::Relaxed,
+                )
+                .is_ok()
             {
                 unsafe {
                     (*thread.get()).assume_init_ref().unpark();
@@ -128,9 +111,9 @@ impl Queue {
         let global_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
         // if our epoch is already current then avoid the SeqCst barrier
         if self.local_epochs[worker_id].load(Ordering::Relaxed) & EPOCH_MASK != global_epoch {
-            // SeqCst acts as a full barrier to publish epoch before touching queue nodes,
-            // preventing reclamation races on weak memory models
-            self.local_epochs[worker_id].store(global_epoch, Ordering::SeqCst);
+            // publish epoch before touching queue nodes to prevent reclamation races
+            self.local_epochs[worker_id].store(global_epoch, Ordering::Relaxed);
+            fence(Ordering::SeqCst);
         }
 
         let mut current = self.head.load(Ordering::Acquire);
@@ -201,7 +184,8 @@ impl Queue {
                 return false;
             }
 
-            self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::SeqCst);
+            self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::Relaxed);
+            fence(Ordering::SeqCst);
 
             if self.has_tasks() {
                 return true;
@@ -219,8 +203,11 @@ impl Queue {
 
         let mut min_epoch = global_epoch & EPOCH_MASK;
 
+        // make sure we see the most recent local_epochs
+        fence(Ordering::SeqCst);
+
         for local_epoch in self.local_epochs.iter() {
-            let e = local_epoch.load(Ordering::SeqCst);
+            let e = local_epoch.load(Ordering::Relaxed);
             if e != NOT_IN_CRITICAL {
                 // determine if e is older than min_epoch in the circular buffer.
                 // the check (min - e) < HALF handles wrap-around
