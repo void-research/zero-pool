@@ -1,6 +1,6 @@
 # Miri Verification
 
-**Last Verified:** Zero-Pool v0.8.0
+**Last Verified:** Zero-Pool v0.8.1
 
 This directory contains integration tests verified by **Miri** (Rust's MIR interpreter) to ensure the thread pool is free of data races, deadlocks, and undefined behavior.
 
