@@ -39,6 +39,7 @@
 mod padded_type;
 mod pool;
 mod queue;
+mod retired_list;
 mod task_batch;
 mod task_future;
 mod worker;

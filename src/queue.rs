@@ -1,4 +1,5 @@
 use crate::padded_type::PaddedType;
+use crate::retired_list::RetiredList;
 use crate::task_batch::TaskBatch;
 use crate::{TaskFnPointer, TaskFuture, TaskParamPointer};
 use std::cell::UnsafeCell;
@@ -104,8 +105,7 @@ impl Queue {
     pub fn get_next_batch(
         &self,
         worker_id: usize,
-        retired_head: &mut *mut TaskBatch,
-        retired_tail: &mut *mut TaskBatch,
+        retired_list: &mut RetiredList,
     ) -> Option<(&TaskBatch, TaskParamPointer)> {
         let global_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
         // if our epoch is already current then avoid the SeqCst barrier
@@ -136,38 +136,15 @@ impl Queue {
                 Ordering::Acquire,
             ) {
                 Ok(_) => {
-                    self.on_consume_batch(current, retired_head, retired_tail);
+                    // safety, fetch a fresh epoch while unlinking to prevent preemption use after free
+                    let fresh_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
+                    retired_list.push(current, fresh_epoch);
                     current = next;
                 }
                 Err(new_head) => {
                     current = new_head;
                 }
             }
-        }
-    }
-
-    fn on_consume_batch(
-        &self,
-        batch: *mut TaskBatch,
-        retired_head: &mut *mut TaskBatch,
-        retired_tail: &mut *mut TaskBatch,
-    ) {
-        // safety, fetch a fresh epoch while unlinking to prevent preemption use after free
-        let fresh_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
-        unsafe {
-            (*batch).retired_epoch.store(fresh_epoch, Ordering::Relaxed);
-            (*batch)
-                .retired_next
-                .store(std::ptr::null_mut(), Ordering::Relaxed);
-
-            if retired_head.is_null() {
-                *retired_head = batch;
-            } else {
-                (**retired_tail)
-                    .retired_next
-                    .store(batch, Ordering::Relaxed);
-            }
-            *retired_tail = batch;
         }
     }
 
