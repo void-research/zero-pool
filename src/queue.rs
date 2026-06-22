@@ -110,7 +110,7 @@ impl Queue {
     ) -> Option<(&TaskBatch, TaskParamPointer)> {
         let global_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
         // if our epoch is already current then avoid the SeqCst barrier
-        if self.local_epochs[worker_id].load(Ordering::Relaxed) & EPOCH_MASK != global_epoch {
+        if self.local_epochs[worker_id].load(Ordering::Relaxed) != global_epoch {
             // publish epoch before touching queue nodes to prevent reclamation races
             self.local_epochs[worker_id].store(global_epoch, Ordering::Relaxed);
             fence(Ordering::SeqCst);
