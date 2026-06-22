@@ -61,24 +61,22 @@ impl Queue {
             future.clone(),
         );
 
-        self.push_and_notify(batch, params.len());
+        self.link_and_notify(batch, params.len());
 
         future
     }
 
-    fn push_and_notify(&self, batch: *mut TaskBatch, count: usize) {
+    fn link_and_notify(&self, batch: *mut TaskBatch, count: usize) {
         let prev_tail = self.tail.swap(batch, Ordering::AcqRel);
         unsafe {
             (*prev_tail).next.store(batch, Ordering::Release);
         }
 
-        self.notify_workers(count.min(self.threads.len()));
-    }
-
-    fn notify_workers(&self, mut remaining: usize) {
         let global_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
 
         fence(Ordering::SeqCst);
+
+        let mut remaining = count.min(self.threads.len());
 
         for (epoch, thread) in self.local_epochs.iter().zip(self.threads.iter()) {
             if epoch
