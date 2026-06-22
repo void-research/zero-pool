@@ -11,6 +11,8 @@ pub struct TaskBatch {
     param_stride: usize,
     params_total_bytes: usize,
     pub future: TaskFuture,
+    pub retired_epoch: AtomicUsize,
+    pub retired_next: AtomicPtr<TaskBatch>,
 }
 
 impl TaskBatch {
@@ -29,6 +31,8 @@ impl TaskBatch {
             param_stride,
             params_total_bytes,
             future,
+            retired_epoch: AtomicUsize::new(0),
+            retired_next: AtomicPtr::new(std::ptr::null_mut()),
         }))
     }
 

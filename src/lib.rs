@@ -36,7 +36,6 @@
 //! assert_eq!(result, 84);
 //! ```
 
-mod garbage_node;
 mod padded_type;
 mod pool;
 mod queue;

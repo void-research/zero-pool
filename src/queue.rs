@@ -1,4 +1,3 @@
-use crate::garbage_node::GarbageNode;
 use crate::padded_type::PaddedType;
 use crate::task_batch::TaskBatch;
 use crate::{TaskFnPointer, TaskFuture, TaskParamPointer};
@@ -105,8 +104,8 @@ impl Queue {
     pub fn get_next_batch(
         &self,
         worker_id: usize,
-        garbage_head: &mut *mut GarbageNode,
-        garbage_tail: &mut *mut GarbageNode,
+        retired_head: &mut *mut TaskBatch,
+        retired_tail: &mut *mut TaskBatch,
     ) -> Option<(&TaskBatch, TaskParamPointer)> {
         let global_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
         // if our epoch is already current then avoid the SeqCst barrier
@@ -137,7 +136,7 @@ impl Queue {
                 Ordering::Acquire,
             ) {
                 Ok(_) => {
-                    self.on_consume_batch(current, garbage_head, garbage_tail);
+                    self.on_consume_batch(current, retired_head, retired_tail);
                     current = next;
                 }
                 Err(new_head) => {
@@ -150,20 +149,25 @@ impl Queue {
     fn on_consume_batch(
         &self,
         batch: *mut TaskBatch,
-        garbage_head: &mut *mut GarbageNode,
-        garbage_tail: &mut *mut GarbageNode,
+        retired_head: &mut *mut TaskBatch,
+        retired_tail: &mut *mut TaskBatch,
     ) {
         // safety, fetch a fresh epoch while unlinking to prevent preemption use after free
         let fresh_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
-        let garbage_node = GarbageNode::new(batch, fresh_epoch);
-
         unsafe {
-            if garbage_head.is_null() {
-                *garbage_head = garbage_node;
+            (*batch).retired_epoch.store(fresh_epoch, Ordering::Relaxed);
+            (*batch)
+                .retired_next
+                .store(std::ptr::null_mut(), Ordering::Relaxed);
+
+            if retired_head.is_null() {
+                *retired_head = batch;
             } else {
-                (**garbage_tail).next = garbage_node;
+                (**retired_tail)
+                    .retired_next
+                    .store(batch, Ordering::Relaxed);
             }
-            *garbage_tail = garbage_node;
+            *retired_tail = batch;
         }
     }
 

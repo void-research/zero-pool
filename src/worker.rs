@@ -1,11 +1,11 @@
 use std::{
-    sync::Arc,
+    sync::{Arc, atomic::Ordering},
     thread::{self, JoinHandle},
 };
 
 use crate::{
-    garbage_node::GarbageNode,
     queue::{EPOCH_MASK, EPOCH_MASK_HALF, Queue},
+    task_batch::TaskBatch,
     task_future::TaskFuture,
 };
 
@@ -19,8 +19,8 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: TaskFuture) -> JoinHand
             latch.complete_many(1);
             drop(latch);
 
-            let mut garbage_head: *mut GarbageNode = std::ptr::null_mut();
-            let mut garbage_tail: *mut GarbageNode = std::ptr::null_mut();
+            let mut retired_head: *mut TaskBatch = std::ptr::null_mut();
+            let mut retired_tail: *mut TaskBatch = std::ptr::null_mut();
             let mut local_tick: u8 = 0;
 
             loop {
@@ -29,7 +29,7 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: TaskFuture) -> JoinHand
                 }
 
                 while let Some((batch, first_param)) =
-                    queue.get_next_batch(id, &mut garbage_head, &mut garbage_tail)
+                    queue.get_next_batch(id, &mut retired_head, &mut retired_tail)
                 {
                     let mut completed = 1;
                     (batch.fn_ptr)(first_param);
@@ -41,64 +41,72 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: TaskFuture) -> JoinHand
 
                     batch.future.complete_many(completed);
 
-                    maybe_clean_local_garbage(
+                    maybe_clean_local_retired(
                         &queue,
                         &mut local_tick,
-                        &mut garbage_head,
-                        &mut garbage_tail,
+                        &mut retired_head,
+                        &mut retired_tail,
                     );
                 }
             }
 
             // worker thread exits
-            drain_garbage(&mut garbage_head);
+            drain_retired(&mut retired_head);
         })
         .expect("spawn failed")
 }
 
-fn drain_garbage(garbage_head: &mut *mut GarbageNode) {
-    let mut current = *garbage_head;
+fn drain_retired(retired_head: &mut *mut TaskBatch) {
+    let mut current = *retired_head;
     while !current.is_null() {
-        current = GarbageNode::drop_node(current);
+        unsafe {
+            let next = (*current).retired_next.load(Ordering::Relaxed);
+            drop(Box::from_raw(current));
+            current = next;
+        }
     }
-    *garbage_head = std::ptr::null_mut();
+    *retired_head = std::ptr::null_mut();
 }
 
-fn maybe_clean_local_garbage(
+fn maybe_clean_local_retired(
     queue: &Queue,
     local_tick: &mut u8,
-    garbage_head: &mut *mut GarbageNode,
-    garbage_tail: &mut *mut GarbageNode,
+    retired_head: &mut *mut TaskBatch,
+    retired_tail: &mut *mut TaskBatch,
 ) {
     *local_tick = local_tick.wrapping_add(1);
     if *local_tick != 0 {
         return;
     }
 
-    clean_local_garbage(queue, garbage_head, garbage_tail);
+    clean_local_retired(queue, retired_head, retired_tail);
 }
 
-fn clean_local_garbage(
+fn clean_local_retired(
     queue: &Queue,
-    garbage_head: &mut *mut GarbageNode,
-    garbage_tail: &mut *mut GarbageNode,
+    retired_head: &mut *mut TaskBatch,
+    retired_tail: &mut *mut TaskBatch,
 ) {
     let safe_epoch = queue.advance_and_min_epoch();
-    let mut current = *garbage_head;
+    let mut current = *retired_head;
 
     // list is chronologically sorted; reclaim prefix only
     while !current.is_null() {
-        let node_epoch = unsafe { (*current).epoch };
+        let node_epoch = unsafe { (*current).retired_epoch.load(Ordering::Relaxed) };
         if safe_epoch.wrapping_sub(node_epoch).wrapping_sub(1) & EPOCH_MASK < (EPOCH_MASK_HALF - 1)
         {
-            current = GarbageNode::drop_node(current);
+            unsafe {
+                let next = (*current).retired_next.load(Ordering::Relaxed);
+                drop(Box::from_raw(current));
+                current = next;
+            }
         } else {
             break;
         }
     }
 
-    *garbage_head = current;
+    *retired_head = current;
     if current.is_null() {
-        *garbage_tail = std::ptr::null_mut();
+        *retired_tail = std::ptr::null_mut();
     }
 }
