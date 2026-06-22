@@ -3,7 +3,6 @@ use crate::retired_list::RetiredList;
 use crate::task_batch::TaskBatch;
 use crate::{TaskFnPointer, TaskFuture, TaskParamPointer};
 use std::cell::UnsafeCell;
-use std::mem::MaybeUninit;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering, fence};
 use std::thread::{self, Thread};
@@ -17,7 +16,7 @@ pub struct Queue {
     tail: PaddedType<AtomicPtr<TaskBatch>>,
     global_epoch: PaddedType<AtomicUsize>,
     local_epochs: Box<[PaddedType<AtomicUsize>]>,
-    threads: Box<[UnsafeCell<MaybeUninit<Thread>>]>,
+    threads: Box<[UnsafeCell<Thread>]>,
     shutdown: AtomicBool,
 }
 
@@ -34,7 +33,7 @@ impl Queue {
             .collect();
 
         let threads = (0..worker_count)
-            .map(|_| UnsafeCell::new(MaybeUninit::uninit()))
+            .map(|_| UnsafeCell::new(thread::current()))
             .collect();
 
         Queue {
@@ -92,7 +91,7 @@ impl Queue {
                 .is_ok()
             {
                 unsafe {
-                    (*thread.get()).assume_init_ref().unpark();
+                    (*thread.get()).unpark();
                 }
                 remaining -= 1;
                 if remaining == 0 {
@@ -150,7 +149,7 @@ impl Queue {
 
     pub fn register_worker_thread(&self, worker_id: usize) {
         unsafe {
-            (*self.threads[worker_id].get()).write(thread::current());
+            *self.threads[worker_id].get() = thread::current();
         }
     }
 
@@ -214,19 +213,13 @@ impl Queue {
         self.shutdown.store(true, Ordering::Release);
 
         self.threads.iter().for_each(|t| unsafe {
-            (*t.get()).assume_init_ref().unpark();
+            (*t.get()).unpark();
         });
     }
 }
 
 impl Drop for Queue {
     fn drop(&mut self) {
-        for thread in self.threads.iter() {
-            unsafe {
-                (*thread.get()).assume_init_drop();
-            }
-        }
-
         let mut current = self.head.load(Ordering::Relaxed);
         while !current.is_null() {
             let batch = unsafe { Box::from_raw(current) };
