@@ -36,9 +36,6 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: TaskFuture) -> JoinHand
                     retired.clean(&queue);
                 }
             }
-
-            // worker thread exits
-            retired.drain();
         })
         .expect("spawn failed")
 }

@@ -63,8 +63,10 @@ impl RetiredList {
             self.tail = std::ptr::null_mut();
         }
     }
+}
 
-    pub fn drain(&mut self) {
+impl Drop for RetiredList {
+    fn drop(&mut self) {
         let mut current = self.head;
         while !current.is_null() {
             unsafe {
@@ -73,7 +75,5 @@ impl RetiredList {
                 current = next;
             }
         }
-        self.head = std::ptr::null_mut();
-        self.tail = std::ptr::null_mut();
     }
 }
