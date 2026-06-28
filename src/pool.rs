@@ -105,8 +105,10 @@ impl ZeroPool {
     ///
     /// let pool = ZeroPool::new();
     /// let mut results = vec![0u64; 1000];
-    /// let task_params: Vec<_> = (0..1000)
-    ///     .map(|i| MyTaskParams { value: i as u64, result: &mut results[i] })
+    /// let task_params: Vec<_> = results
+    ///     .iter_mut()
+    ///     .enumerate()
+    ///     .map(|(i, res)| MyTaskParams { value: i as u64, result: res })
     ///     .collect();
     /// let future = pool.submit_batch(my_task_fn, &task_params);
     /// future.wait();
