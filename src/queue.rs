@@ -82,7 +82,7 @@ impl Queue {
                 .compare_exchange(
                     NOT_IN_CRITICAL,
                     global_epoch,
-                    Ordering::Release,
+                    Ordering::Relaxed,
                     Ordering::Relaxed,
                 )
                 .is_ok()
