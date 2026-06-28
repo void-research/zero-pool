@@ -3,17 +3,14 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use crate::{queue::Queue, retired_list::RetiredList, task_future::TaskFuture};
+use crate::{queue::Queue, retired_list::RetiredList};
 
-pub fn spawn_worker(id: usize, queue: Arc<Queue>, latch: TaskFuture) -> JoinHandle<()> {
+pub fn spawn_worker(id: usize, queue: Arc<Queue>) -> JoinHandle<()> {
     thread::Builder::new()
         .name(format!("zp{}", id))
         .spawn(move || {
             // register this thread with the queue's waiter so it can be unparked by id
             queue.register_worker_thread(id);
-            // signal registration complete and wait for all workers + main
-            latch.complete_many(1);
-            drop(latch);
 
             let mut retired = RetiredList::new();
 

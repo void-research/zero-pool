@@ -2,8 +2,8 @@ use crate::padded_type::PaddedType;
 use crate::retired_list::RetiredList;
 use crate::task_batch::TaskBatch;
 use crate::{TaskFnPointer, TaskFuture, TaskParamPointer};
-use std::cell::UnsafeCell;
 use std::ptr::NonNull;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering, fence};
 use std::thread::{self, Thread};
 
@@ -16,12 +16,9 @@ pub struct Queue {
     tail: PaddedType<AtomicPtr<TaskBatch>>,
     global_epoch: PaddedType<AtomicUsize>,
     local_epochs: Box<[PaddedType<AtomicUsize>]>,
-    threads: Box<[UnsafeCell<Thread>]>,
+    threads: Box<[OnceLock<Thread>]>,
     shutdown: AtomicBool,
 }
-
-// needed for 'threads'
-unsafe impl Sync for Queue {}
 
 impl Queue {
     pub fn new(worker_count: usize) -> Self {
@@ -32,9 +29,7 @@ impl Queue {
             .map(|_| PaddedType::new(AtomicUsize::new(NOT_IN_CRITICAL)))
             .collect();
 
-        let threads = (0..worker_count)
-            .map(|_| UnsafeCell::new(thread::current()))
-            .collect();
+        let threads = (0..worker_count).map(|_| OnceLock::new()).collect();
 
         Queue {
             head: PaddedType::new(AtomicPtr::new(anchor)),
@@ -78,7 +73,11 @@ impl Queue {
 
         let mut remaining = count.min(self.threads.len());
 
-        for (epoch, thread) in self.local_epochs.iter().zip(self.threads.iter()) {
+        for (epoch, thread_oncelock) in self.local_epochs.iter().zip(self.threads.iter()) {
+            let Some(thread) = thread_oncelock.get() else {
+                continue;
+            };
+
             if epoch
                 .compare_exchange(
                     NOT_IN_CRITICAL,
@@ -88,9 +87,7 @@ impl Queue {
                 )
                 .is_ok()
             {
-                unsafe {
-                    (*thread.get()).unpark();
-                }
+                thread.unpark();
                 remaining -= 1;
                 if remaining == 0 {
                     break;
@@ -146,9 +143,7 @@ impl Queue {
     }
 
     pub fn register_worker_thread(&self, worker_id: usize) {
-        unsafe {
-            *self.threads[worker_id].get() = thread::current();
-        }
+        let _ = self.threads[worker_id].set(thread::current());
     }
 
     // wait until work is available or shutdown
@@ -210,8 +205,10 @@ impl Queue {
     pub fn shutdown(&self) {
         self.shutdown.store(true, Ordering::Release);
 
-        self.threads.iter().for_each(|t| unsafe {
-            (*t.get()).unpark();
+        self.threads.iter().for_each(|thread_oncelock| {
+            if let Some(thread) = thread_oncelock.get() {
+                thread.unpark();
+            }
         });
     }
 }
