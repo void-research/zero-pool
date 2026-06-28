@@ -142,8 +142,8 @@ impl Queue {
         }
     }
 
-    pub fn register_worker_thread(&self, worker_id: usize) {
-        let _ = self.threads[worker_id].set(thread::current());
+    pub fn register_thread(&self, worker_id: usize, thread: Thread) {
+        let _ = self.threads[worker_id].set(thread);
     }
 
     // wait until work is available or shutdown

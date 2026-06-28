@@ -9,9 +9,6 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>) -> JoinHandle<()> {
     thread::Builder::new()
         .name(format!("zp{}", id))
         .spawn(move || {
-            // register this thread with the queue's waiter so it can be unparked by id
-            queue.register_worker_thread(id);
-
             let mut retired = RetiredList::new();
 
             loop {

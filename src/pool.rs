@@ -47,7 +47,11 @@ impl ZeroPool {
         let queue = Arc::new(Queue::new(worker_count));
 
         let workers = (0..worker_count)
-            .map(|id| spawn_worker(id, queue.clone()))
+            .map(|id| {
+                let handle = spawn_worker(id, queue.clone());
+                queue.register_thread(id, handle.thread().clone());
+                handle
+            })
             .collect();
 
         ZeroPool { queue, workers }
@@ -130,8 +134,7 @@ impl Drop for ZeroPool {
     fn drop(&mut self) {
         self.queue.shutdown();
 
-        let workers = std::mem::take(&mut self.workers);
-        for handle in workers {
+        for handle in std::mem::take(&mut self.workers) {
             let _ = handle.join();
         }
     }
