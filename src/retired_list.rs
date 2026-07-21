@@ -1,5 +1,6 @@
 use crate::queue::{EPOCH_MASK, EPOCH_MASK_HALF, Queue};
 use crate::task_batch::TaskBatch;
+use std::sync::atomic::Ordering;
 
 pub struct RetiredList {
     head: *mut TaskBatch,
@@ -18,12 +19,15 @@ impl RetiredList {
 
     pub fn push(&mut self, batch: *mut TaskBatch, epoch: usize) {
         unsafe {
-            (*batch).retired_epoch = epoch;
+            (*batch).retired_epoch.store(epoch, Ordering::Relaxed);
+            (*batch)
+                .retired_next
+                .store(std::ptr::null_mut(), Ordering::Relaxed);
 
             if self.head.is_null() {
                 self.head = batch;
             } else {
-                (*self.tail).retired_next = batch;
+                (*self.tail).retired_next.store(batch, Ordering::Relaxed);
             }
             self.tail = batch;
         }
@@ -40,12 +44,12 @@ impl RetiredList {
 
         // list is chronologically sorted; reclaim prefix only
         while !current.is_null() {
-            let node_epoch = unsafe { (*current).retired_epoch };
+            let node_epoch = unsafe { (*current).retired_epoch.load(Ordering::Relaxed) };
             if safe_epoch.wrapping_sub(node_epoch).wrapping_sub(1) & EPOCH_MASK
                 < (EPOCH_MASK_HALF - 1)
             {
                 let batch = unsafe { Box::from_raw(current) };
-                current = batch.retired_next;
+                current = batch.retired_next.load(Ordering::Relaxed);
             } else {
                 break;
             }
@@ -63,7 +67,7 @@ impl Drop for RetiredList {
         let mut current = self.head;
         while !current.is_null() {
             let batch = unsafe { Box::from_raw(current) };
-            current = batch.retired_next;
+            current = batch.retired_next.load(Ordering::Relaxed);
         }
     }
 }
