@@ -20,9 +20,6 @@ impl RetiredList {
     pub fn push(&mut self, batch: *mut TaskBatch, epoch: usize) {
         unsafe {
             (*batch).retired_epoch.store(epoch, Ordering::Relaxed);
-            (*batch)
-                .retired_next
-                .store(std::ptr::null_mut(), Ordering::Relaxed);
 
             if self.head.is_null() {
                 self.head = batch;
