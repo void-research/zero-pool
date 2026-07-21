@@ -44,11 +44,8 @@ impl RetiredList {
             if safe_epoch.wrapping_sub(node_epoch).wrapping_sub(1) & EPOCH_MASK
                 < (EPOCH_MASK_HALF - 1)
             {
-                unsafe {
-                    let next = (*current).retired_next;
-                    drop(Box::from_raw(current));
-                    current = next;
-                }
+                let batch = unsafe { Box::from_raw(current) };
+                current = batch.retired_next;
             } else {
                 break;
             }
@@ -65,11 +62,8 @@ impl Drop for RetiredList {
     fn drop(&mut self) {
         let mut current = self.head;
         while !current.is_null() {
-            unsafe {
-                let next = (*current).retired_next;
-                drop(Box::from_raw(current));
-                current = next;
-            }
+            let batch = unsafe { Box::from_raw(current) };
+            current = batch.retired_next;
         }
     }
 }
