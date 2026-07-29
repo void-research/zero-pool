@@ -15,6 +15,7 @@ pub struct Queue {
     head: PaddedType<AtomicPtr<TaskBatch>>,
     tail: PaddedType<AtomicPtr<TaskBatch>>,
     global_epoch: PaddedType<AtomicUsize>,
+    pending_batches: PaddedType<AtomicUsize>,
     local_epochs: Box<[PaddedType<AtomicUsize>]>,
     threads: Box<[OnceLock<Thread>]>,
     shutdown: AtomicBool,
@@ -35,6 +36,7 @@ impl Queue {
             head: PaddedType::new(AtomicPtr::new(anchor)),
             tail: PaddedType::new(AtomicPtr::new(anchor)),
             global_epoch: PaddedType::new(AtomicUsize::new(0)),
+            pending_batches: PaddedType::new(AtomicUsize::new(0)),
             local_epochs,
             threads,
             shutdown: AtomicBool::new(false),
@@ -62,6 +64,7 @@ impl Queue {
     }
 
     fn link_and_notify(&self, batch: *mut TaskBatch, count: usize) {
+        self.pending_batches.fetch_add(1, Ordering::Relaxed);
         let prev_tail = self.tail.swap(batch, Ordering::AcqRel);
         unsafe {
             (*prev_tail).next.store(batch, Ordering::Release);
@@ -114,7 +117,10 @@ impl Queue {
         loop {
             let batch = unsafe { &*current };
 
-            if let Some(param) = batch.claim_next_param() {
+            if let Some((param, is_last)) = batch.claim_next_param() {
+                if is_last {
+                    self.decrement_pending_batches();
+                }
                 return Some((batch, param));
             }
 
@@ -196,10 +202,12 @@ impl Queue {
         self.shutdown.load(Ordering::Acquire)
     }
 
-    // being a single global queue means that if work exists, it will exist on tail
+    pub fn decrement_pending_batches(&self) {
+        self.pending_batches.fetch_sub(1, Ordering::Relaxed);
+    }
+
     pub fn has_tasks(&self) -> bool {
-        let tail = self.tail.load(Ordering::Acquire);
-        unsafe { (&*tail).has_unclaimed_tasks() }
+        self.pending_batches.load(Ordering::Relaxed) > 0
     }
 
     pub fn shutdown(&self) {

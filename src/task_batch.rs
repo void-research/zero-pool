@@ -39,7 +39,7 @@ impl TaskBatch {
         }))
     }
 
-    pub fn claim_next_param(&self) -> Option<TaskParamPointer> {
+    pub fn claim_next_param(&self) -> Option<(TaskParamPointer, bool)> {
         let byte_offset = self
             .next_byte_offset
             .fetch_add(self.param_stride, Ordering::Relaxed);
@@ -47,10 +47,8 @@ impl TaskBatch {
         if byte_offset >= self.params_total_bytes {
             return None;
         }
-        unsafe { Some(self.params_ptr.add(byte_offset)) }
-    }
 
-    pub fn has_unclaimed_tasks(&self) -> bool {
-        self.next_byte_offset.load(Ordering::Relaxed) < self.params_total_bytes
+        let is_last = byte_offset + self.param_stride >= self.params_total_bytes;
+        unsafe { Some((self.params_ptr.add(byte_offset), is_last)) }
     }
 }
