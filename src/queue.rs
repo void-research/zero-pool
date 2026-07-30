@@ -66,7 +66,7 @@ impl Queue {
     fn link_and_notify(&self, batch: *mut TaskBatch, count: usize) {
         self.pending_batches.fetch_add(1, Ordering::Relaxed);
 
-        let prev_tail = self.tail.swap(batch, Ordering::AcqRel);
+        let prev_tail = self.tail.swap(batch, Ordering::Release);
         unsafe {
             (*prev_tail).next.store(batch, Ordering::Release);
         }
