@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering, fence};
 use std::thread::{self, Thread};
 
-pub const NOT_IN_CRITICAL: usize = usize::MAX;
+const NOT_IN_CRITICAL: usize = usize::MAX;
 pub const EPOCH_MASK: usize = usize::MAX >> 1; // use only lower bits for epoch
 pub const EPOCH_MASK_HALF: usize = EPOCH_MASK / 2;
 
@@ -199,7 +199,7 @@ impl Queue {
         min_epoch
     }
 
-    pub fn is_shutdown(&self) -> bool {
+    fn is_shutdown(&self) -> bool {
         self.shutdown.load(Ordering::Acquire)
     }
 
@@ -207,18 +207,17 @@ impl Queue {
         self.pending_batches.fetch_sub(1, Ordering::Relaxed);
     }
 
-    pub fn has_tasks(&self) -> bool {
+    fn has_tasks(&self) -> bool {
         self.pending_batches.load(Ordering::Relaxed) > 0
     }
 
     pub fn shutdown(&self) {
         self.shutdown.store(true, Ordering::Release);
 
-        self.threads.iter().for_each(|thread_oncelock| {
-            if let Some(thread) = thread_oncelock.get() {
-                thread.unpark();
-            }
-        });
+        self.threads
+            .iter()
+            .filter_map(OnceLock::get)
+            .for_each(Thread::unpark);
     }
 }
 
