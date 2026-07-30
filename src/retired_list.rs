@@ -37,6 +37,8 @@ impl RetiredList {
         }
     }
 
+    #[cold]
+    #[inline(never)]
     fn clean(&mut self, queue: &Queue) {
         let safe_epoch = queue.advance_and_min_epoch();
         let mut current = self.head;
