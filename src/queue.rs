@@ -157,18 +157,15 @@ impl Queue {
     // returns true if work is available, false if shutdown
     pub fn wait_for_work(&self, worker_id: usize) -> bool {
         loop {
-            if self.has_tasks() {
-                return true;
-            }
-            if self.is_shutdown() {
-                return false;
-            }
-
             self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::Relaxed);
             fence(Ordering::SeqCst);
 
-            if self.has_tasks() {
+            if self.pending_batches.load(Ordering::Relaxed) > 0 {
                 return true;
+            }
+
+            if self.shutdown.load(Ordering::Acquire) {
+                return false;
             }
 
             thread::park();
@@ -199,16 +196,8 @@ impl Queue {
         min_epoch
     }
 
-    fn is_shutdown(&self) -> bool {
-        self.shutdown.load(Ordering::Acquire)
-    }
-
     pub fn decrement_pending_batches(&self) {
         self.pending_batches.fetch_sub(1, Ordering::Relaxed);
-    }
-
-    fn has_tasks(&self) -> bool {
-        self.pending_batches.load(Ordering::Relaxed) > 0
     }
 
     pub fn shutdown(&self) {
