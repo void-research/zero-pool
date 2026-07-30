@@ -30,12 +30,14 @@ impl RetiredList {
         }
     }
 
-    pub fn clean(&mut self, queue: &Queue) {
+    pub fn try_clean(&mut self, queue: &Queue) {
         self.tick = self.tick.wrapping_add(1);
-        if self.tick != 0 {
-            return;
+        if self.tick == 0 {
+            self.clean(queue);
         }
+    }
 
+    fn clean(&mut self, queue: &Queue) {
         let safe_epoch = queue.advance_and_min_epoch();
         let mut current = self.head;
 

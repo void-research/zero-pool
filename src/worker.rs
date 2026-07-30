@@ -30,7 +30,7 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>) -> JoinHandle<()> {
 
                     batch.future.complete_many(completed);
 
-                    retired.clean(&queue);
+                    retired.try_clean(&queue);
                 }
             }
         })
