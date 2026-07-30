@@ -4,19 +4,23 @@ use crate::task_batch::TaskBatch;
 use crate::{TaskFnPointer, TaskFuture, TaskParamPointer};
 use std::ptr::NonNull;
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering, fence};
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicUsize, Ordering, fence};
 use std::thread::{self, Thread};
 
 const NOT_IN_CRITICAL: usize = usize::MAX;
 pub const EPOCH_MASK: usize = usize::MAX >> 1; // use only lower bits for epoch
 pub const EPOCH_MASK_HALF: usize = EPOCH_MASK / 2;
 
+const STATE_RUNNING: u8 = 0;
+const STATE_SLEEPING: u8 = 1;
+const STATE_NOTIFIED: u8 = 2;
+
 pub struct Queue {
     head: PaddedType<AtomicPtr<TaskBatch>>,
     tail: PaddedType<AtomicPtr<TaskBatch>>,
     global_epoch: PaddedType<AtomicUsize>,
-    pending_batches: PaddedType<AtomicUsize>,
     local_epochs: Box<[PaddedType<AtomicUsize>]>,
+    worker_states: Box<[PaddedType<AtomicU8>]>,
     threads: Box<[OnceLock<Thread>]>,
     shutdown: AtomicBool,
 }
@@ -30,14 +34,18 @@ impl Queue {
             .map(|_| PaddedType::new(AtomicUsize::new(NOT_IN_CRITICAL)))
             .collect();
 
+        let worker_states = (0..worker_count)
+            .map(|_| PaddedType::new(AtomicU8::new(STATE_RUNNING)))
+            .collect();
+
         let threads = (0..worker_count).map(|_| OnceLock::new()).collect();
 
         Queue {
             head: PaddedType::new(AtomicPtr::new(anchor)),
             tail: PaddedType::new(AtomicPtr::new(anchor)),
             global_epoch: PaddedType::new(AtomicUsize::new(0)),
-            pending_batches: PaddedType::new(AtomicUsize::new(0)),
             local_epochs,
+            worker_states,
             threads,
             shutdown: AtomicBool::new(false),
         }
@@ -64,33 +72,20 @@ impl Queue {
     }
 
     fn link_and_notify(&self, batch: *mut TaskBatch, count: usize) {
-        self.pending_batches.fetch_add(1, Ordering::Relaxed);
-
         let prev_tail = self.tail.swap(batch, Ordering::Release);
         unsafe {
             (*prev_tail).next.store(batch, Ordering::Release);
         }
 
-        let global_epoch = self.global_epoch.load(Ordering::Relaxed) & EPOCH_MASK;
-
-        fence(Ordering::SeqCst);
-
         let mut remaining = count.min(self.threads.len());
 
-        for (epoch, thread_oncelock) in self.local_epochs.iter().zip(self.threads.iter()) {
+        for (state, thread_oncelock) in self.worker_states.iter().zip(self.threads.iter()) {
             let Some(thread) = thread_oncelock.get() else {
                 continue;
             };
 
-            if epoch
-                .compare_exchange(
-                    NOT_IN_CRITICAL,
-                    global_epoch,
-                    Ordering::Relaxed,
-                    Ordering::Relaxed,
-                )
-                .is_ok()
-            {
+            let prev = state.swap(STATE_NOTIFIED, Ordering::SeqCst);
+            if prev == STATE_SLEEPING {
                 thread.unpark();
                 remaining -= 1;
                 if remaining == 0 {
@@ -118,10 +113,7 @@ impl Queue {
         loop {
             let batch = unsafe { &*current };
 
-            if let Some((param, is_last)) = batch.claim_next_param() {
-                if is_last {
-                    self.decrement_pending_batches();
-                }
+            if let Some(param) = batch.claim_next_param() {
                 return Some((batch, param));
             }
 
@@ -156,21 +148,30 @@ impl Queue {
     // wait until work is available or shutdown
     // returns true if work is available, false if shutdown
     pub fn wait_for_work(&self, worker_id: usize) -> bool {
+        self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::Relaxed);
+
         loop {
-            self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::Relaxed);
-            fence(Ordering::SeqCst);
-
-            if self.pending_batches.load(Ordering::Relaxed) > 0 {
-                return true;
-            }
-
             if self.shutdown.load(Ordering::Acquire) {
                 return false;
             }
 
+            if self.worker_states[worker_id]
+                .compare_exchange(
+                    STATE_RUNNING,
+                    STATE_SLEEPING,
+                    Ordering::SeqCst,
+                    Ordering::Relaxed,
+                )
+                .is_err()
+            {
+                self.worker_states[worker_id].store(STATE_RUNNING, Ordering::Relaxed);
+                return true;
+            }
+
             thread::park();
 
-            if self.pending_batches.load(Ordering::Relaxed) > 0 {
+            if self.worker_states[worker_id].swap(STATE_RUNNING, Ordering::SeqCst) == STATE_NOTIFIED
+            {
                 return true;
             }
         }
@@ -198,10 +199,6 @@ impl Queue {
             }
         }
         min_epoch
-    }
-
-    pub fn decrement_pending_batches(&self) {
-        self.pending_batches.fetch_sub(1, Ordering::Relaxed);
     }
 
     pub fn shutdown(&self) {

@@ -20,10 +20,7 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>) -> JoinHandle<()> {
                     let mut completed = 1;
                     (batch.fn_ptr)(first_param);
 
-                    while let Some((param, is_last)) = batch.claim_next_param() {
-                        if is_last {
-                            queue.decrement_pending_batches();
-                        }
+                    while let Some(param) = batch.claim_next_param() {
                         (batch.fn_ptr)(param);
                         completed += 1;
                     }

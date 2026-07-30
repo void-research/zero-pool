@@ -39,7 +39,7 @@ impl TaskBatch {
         }))
     }
 
-    pub fn claim_next_param(&self) -> Option<(TaskParamPointer, bool)> {
+    pub fn claim_next_param(&self) -> Option<TaskParamPointer> {
         let byte_offset = self
             .next_byte_offset
             .fetch_add(self.param_stride, Ordering::Relaxed);
@@ -48,7 +48,6 @@ impl TaskBatch {
             return None;
         }
 
-        let is_last = byte_offset + self.param_stride >= self.params_total_bytes;
-        unsafe { Some((self.params_ptr.add(byte_offset), is_last)) }
+        unsafe { Some(self.params_ptr.add(byte_offset)) }
     }
 }
