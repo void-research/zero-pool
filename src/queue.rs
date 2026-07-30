@@ -169,6 +169,10 @@ impl Queue {
             }
 
             thread::park();
+
+            if self.pending_batches.load(Ordering::Relaxed) > 0 {
+                return true;
+            }
         }
     }
 
