@@ -154,8 +154,6 @@ impl Queue {
     // wait until work is available or shutdown
     // returns true if work is available, false if shutdown
     pub fn wait_for_work(&self, worker_id: usize) -> bool {
-        self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::Relaxed);
-
         loop {
             if self.shutdown.load(Ordering::Acquire) {
                 return false;
@@ -173,6 +171,8 @@ impl Queue {
                 self.worker_states[worker_id].store(STATE_RUNNING, Ordering::Relaxed);
                 return true;
             }
+
+            self.local_epochs[worker_id].store(NOT_IN_CRITICAL, Ordering::Relaxed);
 
             thread::park();
 
