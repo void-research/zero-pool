@@ -84,7 +84,7 @@ impl Queue {
                 continue;
             };
 
-            let prev = state.swap(STATE_NOTIFIED, Ordering::Relaxed);
+            let prev = state.swap(STATE_NOTIFIED, Ordering::Release);
             if prev == STATE_SLEEPING {
                 thread.unpark();
                 remaining -= 1;
@@ -158,7 +158,7 @@ impl Queue {
                     STATE_RUNNING,
                     STATE_SLEEPING,
                     Ordering::Relaxed,
-                    Ordering::Relaxed,
+                    Ordering::Acquire,
                 )
                 .is_err()
             {
@@ -170,7 +170,7 @@ impl Queue {
 
             thread::park();
 
-            if self.worker_states[worker_id].swap(STATE_RUNNING, Ordering::Relaxed)
+            if self.worker_states[worker_id].swap(STATE_RUNNING, Ordering::Acquire)
                 == STATE_NOTIFIED
             {
                 return true;
