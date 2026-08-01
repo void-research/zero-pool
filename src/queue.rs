@@ -84,13 +84,7 @@ impl Queue {
                 continue;
             };
 
-            // needs benchmarking
-            // formal model means possible missed word, in practise wont
-            if state.load(Ordering::Relaxed) == STATE_NOTIFIED {
-                continue;
-            }
-
-            let prev = state.swap(STATE_NOTIFIED, Ordering::Release);
+            let prev = state.swap(STATE_NOTIFIED, Ordering::Relaxed);
             if prev == STATE_SLEEPING {
                 thread.unpark();
                 remaining -= 1;
@@ -163,8 +157,8 @@ impl Queue {
                 .compare_exchange(
                     STATE_RUNNING,
                     STATE_SLEEPING,
-                    Ordering::Acquire,
-                    Ordering::Acquire,
+                    Ordering::Relaxed,
+                    Ordering::Relaxed,
                 )
                 .is_err()
             {
@@ -176,7 +170,7 @@ impl Queue {
 
             thread::park();
 
-            if self.worker_states[worker_id].swap(STATE_RUNNING, Ordering::Acquire)
+            if self.worker_states[worker_id].swap(STATE_RUNNING, Ordering::Relaxed)
                 == STATE_NOTIFIED
             {
                 return true;
