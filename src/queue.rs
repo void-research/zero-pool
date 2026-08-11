@@ -80,12 +80,9 @@ impl Queue {
         let mut remaining = count.min(self.threads.len());
 
         for (state, thread_oncelock) in self.worker_states.iter().zip(self.threads.iter()) {
-            let Some(thread) = thread_oncelock.get() else {
-                continue;
-            };
-
-            let prev = state.swap(STATE_NOTIFIED, Ordering::Release);
-            if prev == STATE_SLEEPING {
+            if let Some(thread) = thread_oncelock.get()
+                && state.swap(STATE_NOTIFIED, Ordering::Release) == STATE_SLEEPING
+            {
                 thread.unpark();
                 remaining -= 1;
                 if remaining == 0 {
@@ -191,12 +188,10 @@ impl Queue {
 
         for local_epoch in self.local_epochs.iter() {
             let e = local_epoch.load(Ordering::Relaxed);
-            if e != NOT_IN_CRITICAL {
-                // determine if e is older than min_epoch in the circular buffer.
-                // the check (min - e) < HALF handles wrap-around
-                if min_epoch.wrapping_sub(e) & EPOCH_MASK < EPOCH_MASK_HALF {
-                    min_epoch = e;
-                }
+            // determine if e is older than min_epoch in the circular buffer.
+            // the check (min - e) < HALF handles wrap-around
+            if e != NOT_IN_CRITICAL && (min_epoch.wrapping_sub(e) & EPOCH_MASK < EPOCH_MASK_HALF) {
+                min_epoch = e;
             }
         }
         min_epoch
