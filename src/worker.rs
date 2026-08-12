@@ -7,7 +7,7 @@ use crate::{queue::Queue, retired_list::RetiredList};
 
 pub fn spawn_worker(id: usize, queue: Arc<Queue>) -> JoinHandle<()> {
     thread::Builder::new()
-        .name(format!("zp{}", id))
+        .name(format!("zp{id}"))
         .spawn(move || {
             let mut retired = RetiredList::new();
 
