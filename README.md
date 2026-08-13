@@ -26,14 +26,14 @@ This approach allows complete freedom to optimise multi-threaded workloads any w
 - Zero-Pool supports both explicitly creating new thread pools (`ZeroPool::new`, `ZeroPool::with_workers`) and using the global instance (`zero_pool::global_pool`).
 - Task functions take a single parameter (e.g. `&MyTaskParams`).
 
-## Benchmarks (AMD 5900X, Linux 6.18)
+## Benchmarks (AMD 5900X, Linux 7.1)
 ```rust
-rayon_heavy_compute         ... bench:   4,873,036.50 ns/iter (+/- 952,238.45)
-zeropool_heavy_compute      ... bench:   4,485,877.20 ns/iter (+/- 397,240.79)
-rayon_individual_tasks      ... bench:     782,252.32 ns/iter (+/- 28,578.20)
-zeropool_individual_tasks   ... bench:     458,742.62 ns/iter (+/- 12,855.32)
-rayon_task_overhead         ... bench:      30,124.76 ns/iter (+/- 1,946.51)
-zeropool_task_overhead      ... bench:      32,753.55 ns/iter (+/- 4,477.80)
+rayon_heavy_compute         ... bench:   4,802,609.15 ns/iter (+/- 594,894.53)
+zeropool_heavy_compute      ... bench:   4,515,778.35 ns/iter (+/- 384,069.02)
+rayon_individual_tasks      ... bench:     771,468.31 ns/iter (+/- 52,976.92)
+zeropool_individual_tasks   ... bench:   1,043,626.32 ns/iter (+/- 91,674.50)
+rayon_task_overhead         ... bench:      30,815.31 ns/iter (+/- 2,444.29)
+zeropool_task_overhead      ... bench:      31,169.77 ns/iter (+/- 2,899.86)
 ```
 
 ## Example Usage
