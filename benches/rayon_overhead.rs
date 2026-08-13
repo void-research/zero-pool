@@ -9,7 +9,7 @@ use std::hint::black_box;
 use test::Bencher;
 
 #[bench]
-fn bench_task_overhead_rayon(b: &mut Bencher) {
+fn overhead(b: &mut Bencher) {
     let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
 
     b.iter(|| {

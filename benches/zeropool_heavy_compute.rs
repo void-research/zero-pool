@@ -34,7 +34,7 @@ fn heavy_compute_task_fn(params: &HeavyComputeTask) {
 }
 
 #[bench]
-fn bench_heavy_compute_zeropool(b: &mut Bencher) {
+fn heavy_compute(b: &mut Bencher) {
     let pool = ZeroPool::new();
 
     let seeds: Vec<u64> = (0..TASK_COUNT)

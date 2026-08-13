@@ -8,7 +8,7 @@ use std::hint::black_box;
 use test::Bencher;
 
 #[bench]
-fn bench_individual_tasks_rayon(b: &mut Bencher) {
+fn individual_tasks(b: &mut Bencher) {
     let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
 
     b.iter(|| {

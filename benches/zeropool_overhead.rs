@@ -19,7 +19,7 @@ fn index_task_fn(params: &IndexTask) {
 }
 
 #[bench]
-fn bench_task_overhead_zeropool(b: &mut Bencher) {
+fn overhead(b: &mut Bencher) {
     let pool = ZeroPool::new();
 
     b.iter(|| {

@@ -9,7 +9,7 @@ use std::hint::black_box;
 use test::Bencher;
 
 #[bench]
-fn bench_heavy_compute_rayon(b: &mut Bencher) {
+fn heavy_compute(b: &mut Bencher) {
     let pool = rayon::ThreadPoolBuilder::new().build().unwrap();
 
     let seeds: Vec<u64> = (0..TASK_COUNT)

@@ -19,7 +19,7 @@ fn index_task_fn(params: &IndexTask) {
 }
 
 #[bench]
-fn bench_individual_tasks_zeropool(b: &mut Bencher) {
+fn individual_tasks(b: &mut Bencher) {
     let pool = ZeroPool::new();
 
     b.iter(|| {
