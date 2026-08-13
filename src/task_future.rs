@@ -39,6 +39,7 @@ impl TaskFuture {
     /// Returns `true` if all tasks have finished execution.
     /// This is a non-blocking operation using an atomic load.
     #[must_use]
+    #[inline]
     pub fn is_complete(&self) -> bool {
         self.count.load(Ordering::Acquire) == 0
     }
@@ -48,6 +49,7 @@ impl TaskFuture {
     /// First checks completion with an atomic load; if incomplete, parks the thread.
     ///
     /// **Warning:** This method must be called from the same thread that created this `TaskFuture`.
+    #[inline]
     pub fn wait(&self) {
         debug_assert_eq!(
             self.owner_thread.id(),
