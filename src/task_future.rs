@@ -70,6 +70,7 @@ impl TaskFuture {
     ///
     /// **Warning:** This method must be called from the same thread that created this `TaskFuture`.
     #[must_use]
+    #[inline]
     pub fn wait_timeout(&self, timeout: Duration) -> bool {
         debug_assert_eq!(
             self.owner_thread.id(),
