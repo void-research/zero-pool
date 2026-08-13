@@ -146,7 +146,7 @@ impl Queue {
     // returns true if work is available, false if shutdown
     pub fn wait_for_work(&self, worker_id: usize) -> bool {
         loop {
-            if self.shutdown.load(Ordering::Acquire) {
+            if self.shutdown.load(Ordering::Relaxed) {
                 return false;
             }
 
@@ -198,7 +198,7 @@ impl Queue {
     }
 
     pub fn shutdown(&self) {
-        self.shutdown.store(true, Ordering::Release);
+        self.shutdown.store(true, Ordering::Relaxed);
 
         self.threads
             .iter()
