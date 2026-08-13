@@ -16,12 +16,5 @@ exclude = [
     "tests/*",
 ]
 
-[dependencies]
-# stdlib only!
-
 [dev-dependencies]
 rayon = "1"
-
-[[bench]]
-name = "comparison"
-# zero-pool compiles on stable, but currently uses nightly for benches
