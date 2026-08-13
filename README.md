@@ -171,9 +171,10 @@ fn example_task(params: &ExampleParams) {
     unsafe { *params.result = sum; }
 }
 
-let pool = global_pool();
 let mut result = 0u64;
 let params = ExampleParams { work: 1_000, result: &mut result };
 
-pool.submit_task(example_task, &params).wait();
+global_pool().submit_task(example_task, &params).wait();
+
+println!("Result: {}", result);
 ```
