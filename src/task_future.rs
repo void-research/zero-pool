@@ -82,7 +82,7 @@ impl TaskFuture {
             if elapsed >= timeout {
                 return false;
             }
-            thread::park_timeout(timeout - elapsed);
+            thread::park_timeout(timeout.saturating_sub(elapsed));
         }
     }
 
