@@ -38,6 +38,7 @@ impl TaskFuture {
     ///
     /// Returns `true` if all tasks have finished execution.
     /// This is a non-blocking operation using an atomic load.
+    #[must_use]
     pub fn is_complete(&self) -> bool {
         self.count.load(Ordering::Acquire) == 0
     }
@@ -66,6 +67,7 @@ impl TaskFuture {
     /// `false` if the timeout was reached first.
     ///
     /// **Warning:** This method must be called from the same thread that created this `TaskFuture`.
+    #[must_use]
     pub fn wait_timeout(&self, timeout: Duration) -> bool {
         debug_assert_eq!(
             self.owner_thread.id(),

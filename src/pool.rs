@@ -23,6 +23,7 @@ impl ZeroPool {
     /// use zero_pool::ZeroPool;
     /// let pool = ZeroPool::new();
     /// ```
+    #[must_use]
     pub fn new() -> Self {
         let worker_count = thread::available_parallelism().unwrap_or(NonZeroUsize::MIN);
         Self::with_workers(worker_count)
@@ -41,6 +42,7 @@ impl ZeroPool {
     /// use zero_pool::ZeroPool;
     /// let pool = ZeroPool::with_workers(NonZeroUsize::new(4).unwrap());
     /// ```
+    #[must_use]
     pub fn with_workers(worker_count: NonZeroUsize) -> Self {
         let worker_count = worker_count.get();
 

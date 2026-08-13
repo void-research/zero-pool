@@ -186,7 +186,7 @@ impl Queue {
         // make sure we see the most recent local_epochs
         fence(Ordering::SeqCst);
 
-        for local_epoch in self.local_epochs.iter() {
+        for local_epoch in &self.local_epochs {
             let e = local_epoch.load(Ordering::Relaxed);
             // determine if e is older than min_epoch in the circular buffer.
             // the check (min - e) < HALF handles wrap-around

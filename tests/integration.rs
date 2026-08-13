@@ -57,7 +57,7 @@ fn test_basic_functionality() {
 
     let params = SimpleTask {
         iterations: 1000,
-        result: &mut result,
+        result: &raw mut result,
     };
     let future = pool.submit_task(simple_cpu_task, &params);
     future.wait();
@@ -72,7 +72,7 @@ fn test_global_pool_usage() {
 
     let params = SimpleTask {
         iterations: 1000,
-        result: &mut result,
+        result: &raw mut result,
     };
 
     let future = pool.submit_task(simple_cpu_task, &params);
@@ -135,7 +135,7 @@ fn test_single_worker_behavior() {
     batch.wait();
 
     for (i, &result) in results.iter().enumerate() {
-        assert_ne!(result, 0, "Task {} did not complete", i);
+        assert_ne!(result, 0, "Task {i} did not complete");
     }
 }
 
@@ -195,7 +195,7 @@ fn test_shutdown_and_cleanup() {
         let mut test_result = 0u64;
         let params = SimpleTask {
             iterations: 100,
-            result: &mut test_result,
+            result: &raw mut test_result,
         };
         let future = pool2.submit_task(simple_cpu_task, &params);
         future.wait();
@@ -210,7 +210,7 @@ fn test_rapid_pool_creation() {
         let mut result = 0u64;
         let params = SimpleTask {
             iterations: 500,
-            result: &mut result,
+            result: &raw mut result,
         };
 
         let future = pool.submit_task(simple_cpu_task, &params);
@@ -228,7 +228,7 @@ fn test_wait_timeout() {
     let mut result = 0u64;
     let params = SimpleTask {
         iterations: 100,
-        result: &mut result,
+        result: &raw mut result,
     };
     let future = pool.submit_task(simple_cpu_task, &params);
 
@@ -272,7 +272,7 @@ fn test_stress_rapid_batches() {
         let batch = pool.submit_batch(simple_cpu_task, &tasks);
         let completed = batch.wait_timeout(Duration::from_secs(10));
 
-        assert!(completed, "Batch {} timed out", batch_num);
+        assert!(completed, "Batch {batch_num} timed out");
 
         let completed_count = results.iter().filter(|&&r| r != 0).count();
         assert_eq!(completed_count, batch_size);
@@ -297,7 +297,7 @@ fn test_benchmark_simulation() {
         let batch = pool.submit_batch(simple_task_fn, &tasks);
         let completed = batch.wait_timeout(Duration::from_secs(5));
 
-        assert!(completed, "Iteration {} timed out", iteration);
+        assert!(completed, "Iteration {iteration} timed out");
 
         let completed_count = results.iter().filter(|&&r| r != 0).count();
         assert_eq!(completed_count, 100);
@@ -335,7 +335,7 @@ fn test_reclaim_trigger() {
     let mut result = 0u64;
     let params = SimpleTask {
         iterations: 0,
-        result: &mut result,
+        result: &raw mut result,
     };
 
     for _ in 0..300 {

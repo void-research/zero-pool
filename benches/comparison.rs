@@ -25,7 +25,7 @@ fn heavy_compute_task_fn(params: &HeavyComputeTask) {
 
     for _ in 0..work_amount {
         // complex computation
-        x = x.wrapping_mul(1664525).wrapping_add(1013904223);
+        x = x.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
         sum = sum.wrapping_add(x);
 
         // some branching to make it less predictable
@@ -60,7 +60,7 @@ fn bench_heavy_compute_zeropool(b: &mut Bencher) {
     let seeds: Vec<u64> = (0..TASK_COUNT)
         .map(|i| {
             let mut seed = i as u64;
-            seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+            seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
             seed
         })
         .collect();
@@ -91,7 +91,7 @@ fn bench_heavy_compute_rayon(b: &mut Bencher) {
     let seeds: Vec<u64> = (0..TASK_COUNT)
         .map(|i| {
             let mut seed = i as u64;
-            seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+            seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
             seed
         })
         .collect();
@@ -108,7 +108,7 @@ fn bench_heavy_compute_rayon(b: &mut Bencher) {
                     let mut x = seed;
 
                     for _ in 0..work_amount {
-                        x = x.wrapping_mul(1664525).wrapping_add(1013904223);
+                        x = x.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
                         sum = sum.wrapping_add(x);
 
                         if x.is_multiple_of(3) {
@@ -136,12 +136,12 @@ fn bench_individual_tasks_zeropool(b: &mut Bencher) {
         let mut tasks = Vec::with_capacity(INDIVIDUAL_TASK_COUNT);
         let mut futures = Vec::with_capacity(INDIVIDUAL_TASK_COUNT);
 
-        for result in results.iter_mut() {
+        for result in &mut results {
             tasks.push(IndexTask { result });
         }
 
         // submit individual tasks
-        for task in tasks.iter() {
+        for task in &tasks {
             let future = pool.submit_task(index_task_fn, task);
             futures.push(future);
         }
@@ -164,7 +164,7 @@ fn bench_individual_tasks_rayon(b: &mut Bencher) {
 
         pool.install(|| {
             rayon::scope(|s| {
-                for result in results.iter_mut() {
+                for result in &mut results {
                     s.spawn(move |_| {
                         *result = 42u64;
                     });
