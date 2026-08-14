@@ -11,11 +11,8 @@ pub struct TaskBatch {
     param_stride: usize,
     params_total_bytes: usize,
     pub future: TaskFuture,
-    // used only by thread that takes ownership for reclamation
-    // but because of retagging/aliasing rules needs either unsafecell or atomic to pass MIRI.
-    // should be the same machine instruction regardless of choice with Relaxed ordering.
-    pub retired_epoch: AtomicUsize,
-    pub retired_next: AtomicPtr<TaskBatch>,
+    pub retired_epoch: usize,
+    pub retired_next: *mut TaskBatch,
 }
 
 impl TaskBatch {
@@ -34,8 +31,8 @@ impl TaskBatch {
             param_stride,
             params_total_bytes,
             future,
-            retired_epoch: AtomicUsize::new(0),
-            retired_next: AtomicPtr::new(std::ptr::null_mut()),
+            retired_epoch: 0,
+            retired_next: std::ptr::null_mut(),
         }))
     }
 
