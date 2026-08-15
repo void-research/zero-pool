@@ -15,14 +15,12 @@ impl<T> PaddedType<T> {
 impl<T> Deref for PaddedType<T> {
     type Target = T;
 
-    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.value
     }
 }
 
 impl<T> DerefMut for PaddedType<T> {
-    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.value
     }
