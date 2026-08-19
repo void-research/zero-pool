@@ -16,7 +16,7 @@ MIRIFLAGS="-Zmiri-tree-borrows -Zmiri-preemption-rate=0" cargo +nightly miri tes
 * **`-Zmiri-tree-borrows`**: Uses the Tree Borrows aliasing model, which correctly verifies the library's safe function pointer erasure pattern.
 * **`-Zmiri-preemption-rate=0`**: Forces a context switch at every possible opportunity to maximize race condition detection.
 
-## Verification Log (No tree-borrows)
+## Verification Log (Default Stacked Borrows)
 ```text
 MIRIFLAGS="-Zmiri-preemption-rate=0" cargo +nightly miri test
     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.00s
@@ -54,7 +54,7 @@ test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 all doctests ran in 0.31s; merged doctests compilation took 0.01s
 ```
 
-## Verification Log (With tree-borrows)
+## Verification Log (Tree Borrows)
 ```text
 MIRIFLAGS="-Zmiri-tree-borrows -Zmiri-preemption-rate=0" cargo +nightly miri test
     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.00s
