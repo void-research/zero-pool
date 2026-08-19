@@ -1,5 +1,5 @@
 use std::{num::NonZeroUsize, time::Duration};
-use zero_pool::{ZeroPool, global_pool};
+use zero_pool::ZeroPool;
 
 struct TaskParams {
     value: u64,
@@ -28,9 +28,13 @@ fn test_basic_functionality() {
     assert_eq!(result, 85);
 }
 
+// Excluded under Miri: `global_pool()` is stored in a static `OnceLock`, so its worker
+// threads are intentionally not joined until process exit. Skipping this under Miri
+// allows running the entire test suite with memory leak detection.
 #[test]
+#[cfg(not(miri))]
 fn test_global_pool_usage() {
-    let pool = global_pool();
+    let pool = zero_pool::global_pool();
     let mut result = 0u64;
 
     let params = TaskParams {
@@ -43,7 +47,7 @@ fn test_global_pool_usage() {
 
     assert_eq!(result, 43);
     assert!(
-        std::ptr::eq(pool, global_pool()),
+        std::ptr::eq(pool, zero_pool::global_pool()),
         "Global pool should be a singleton"
     );
 }
