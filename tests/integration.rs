@@ -183,7 +183,7 @@ fn test_consecutive_batches() {
 
 #[test]
 fn test_reclaim_trigger() {
-    // Submitting >256 batches triggers `RetiredList::try_clean`
+    // >256 submissions for each worker
     let pool = ZeroPool::with_workers(NonZeroUsize::new(2).unwrap());
     let mut result = 0u64;
     let params = TaskParams {
@@ -191,7 +191,7 @@ fn test_reclaim_trigger() {
         result: &raw mut result,
     };
 
-    for _ in 0..1000 {
+    for _ in 0..550 {
         let future = pool.submit_task(compute_task, &params);
         future.wait();
     }
