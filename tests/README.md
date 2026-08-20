@@ -1,6 +1,6 @@
 # Miri Verification
 
-**Last Verified:** Zero-Pool v0.8.4
+**Last Verified:** Zero-Pool v0.8.5
 
 This directory contains integration tests verified by **Miri** (Rust's MIR interpreter) to ensure the thread pool is free of data races, deadlocks, memory leaks, and undefined behavior.
 
@@ -20,13 +20,13 @@ MIRIFLAGS="-Zmiri-tree-borrows -Zmiri-preemption-rate=1" cargo +nightly miri tes
 ```text
 MIRIFLAGS="-Zmiri-preemption-rate=1" cargo +nightly miri test
     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.00s
-     Running unittests src/lib.rs (target/miri/x86_64-unknown-linux-gnu/debug/build/zero-pool/12c6f4f678eb80b0/out/zero_pool-12c6f4f678eb80b0)
+     Running unittests src/lib.rs (target/miri/x86_64-unknown-linux-gnu/debug/build/zero-pool/e806899093ca46ae/out/zero_pool-e806899093ca46ae)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
-     Running tests/integration.rs (target/miri/x86_64-unknown-linux-gnu/debug/build/zero-pool/0100e4e3154291b5/out/integration-0100e4e3154291b5)
+     Running tests/integration.rs (target/miri/x86_64-unknown-linux-gnu/debug/build/zero-pool/eee4e1d1ea3e6291/out/integration-eee4e1d1ea3e6291)
 
 running 8 tests
 test test_basic_functionality ... ok
@@ -57,14 +57,14 @@ all doctests ran in 0.33s; merged doctests compilation took 0.01s
 ## Verification Log (Tree Borrows)
 ```text
 MIRIFLAGS="-Zmiri-tree-borrows -Zmiri-preemption-rate=1" cargo +nightly miri test
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
-     Running unittests src/lib.rs (target/miri/x86_64-unknown-linux-gnu/debug/build/zero-pool/12c6f4f678eb80b0/out/zero_pool-12c6f4f678eb80b0)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.00s
+     Running unittests src/lib.rs (target/miri/x86_64-unknown-linux-gnu/debug/build/zero-pool/e806899093ca46ae/out/zero_pool-e806899093ca46ae)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
-     Running tests/integration.rs (target/miri/x86_64-unknown-linux-gnu/debug/build/zero-pool/0100e4e3154291b5/out/integration-0100e4e3154291b5)
+     Running tests/integration.rs (target/miri/x86_64-unknown-linux-gnu/debug/build/zero-pool/eee4e1d1ea3e6291/out/integration-eee4e1d1ea3e6291)
 
 running 8 tests
 test test_basic_functionality ... ok
