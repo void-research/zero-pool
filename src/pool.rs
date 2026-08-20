@@ -1,6 +1,7 @@
 use crate::{queue::Queue, task_future::TaskFuture, worker::spawn_worker};
 use std::{
     num::NonZeroUsize,
+    slice,
     sync::Arc,
     thread::{self, JoinHandle},
 };
@@ -83,9 +84,8 @@ impl ZeroPool {
     /// assert_eq!(result, 84);
     /// ```
     #[inline]
-    pub fn submit_task<T>(&self, task_fn: fn(&T), params: &T) -> TaskFuture {
-        let slice = std::slice::from_ref(params);
-        self.queue.push_task_batch(task_fn, slice)
+    pub fn submit_task<T>(&self, task_fn: fn(&T), param: &T) -> TaskFuture {
+        self.queue.push_task_batch(task_fn, slice::from_ref(param))
     }
 
     /// Submit a batch of uniform tasks
@@ -119,8 +119,8 @@ impl ZeroPool {
     /// assert_eq!(results[999], 1998);
     /// ```
     #[inline]
-    pub fn submit_batch<T>(&self, task_fn: fn(&T), params_vec: &[T]) -> TaskFuture {
-        self.queue.push_task_batch(task_fn, params_vec)
+    pub fn submit_batch<T>(&self, task_fn: fn(&T), params: &[T]) -> TaskFuture {
+        self.queue.push_task_batch(task_fn, params)
     }
 }
 
