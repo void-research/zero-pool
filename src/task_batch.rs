@@ -1,6 +1,8 @@
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
-use crate::{TaskFnPointer, TaskParamPointer, padded_type::PaddedType, task_future::TaskFuture};
+use crate::{
+    TaskFnPointer, TaskParamPointer, padded_type::PaddedType, scope::CompletionHandle,
+};
 
 pub struct TaskBatch {
     next_byte_offset: PaddedType<AtomicUsize>,
@@ -10,7 +12,7 @@ pub struct TaskBatch {
     params_ptr: TaskParamPointer,
     param_stride: usize,
     params_total_bytes: usize,
-    pub future: TaskFuture,
+    pub completion: Option<CompletionHandle>,
     // used only by thread that takes ownership for reclamation
     // but because of retagging/aliasing rules needs either unsafecell or atomic to pass MIRI.
     // should be the same machine instruction regardless of choice with Relaxed ordering.
@@ -24,7 +26,7 @@ impl TaskBatch {
         params_ptr: TaskParamPointer,
         param_stride: usize,
         params_total_bytes: usize,
-        future: TaskFuture,
+        completion: Option<CompletionHandle>,
     ) -> *mut Self {
         Box::into_raw(Box::new(TaskBatch {
             next_byte_offset: PaddedType::new(AtomicUsize::new(0)),
@@ -33,7 +35,7 @@ impl TaskBatch {
             params_ptr,
             param_stride,
             params_total_bytes,
-            future,
+            completion,
             retired_epoch: AtomicUsize::new(0),
             retired_next: AtomicPtr::new(std::ptr::null_mut()),
         }))

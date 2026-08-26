@@ -1,4 +1,4 @@
-use std::{num::NonZeroUsize, time::Duration};
+use std::num::NonZeroUsize;
 use zero_pool::ZeroPool;
 
 struct TaskParams {
@@ -21,10 +21,8 @@ fn test_basic_functionality() {
         value: 42,
         result: &raw mut result,
     };
-    let future = pool.submit_task(compute_task, &params);
-    future.wait();
+    pool.submit_and_wait(compute_task, &params);
 
-    assert!(future.is_complete());
     assert_eq!(result, 85);
 }
 
@@ -42,8 +40,7 @@ fn test_global_pool_usage() {
         result: &raw mut result,
     };
 
-    let future = pool.submit_task(compute_task, &params);
-    future.wait();
+    pool.submit_and_wait(compute_task, &params);
 
     assert_eq!(result, 43);
     assert!(
@@ -67,10 +64,8 @@ fn test_batch_submission() {
         })
         .collect();
 
-    let batch = pool.submit_batch(compute_task, &tasks);
-    batch.wait();
+    pool.submit_batch_and_wait(compute_task, &tasks);
 
-    assert!(batch.is_complete());
     for (i, &res) in results.iter().enumerate() {
         assert_eq!(res, (i as u64) * 2 + 1, "Task {i} computed incorrect value");
     }
@@ -80,10 +75,7 @@ fn test_batch_submission() {
 fn test_empty_batch_submission() {
     let pool = ZeroPool::new();
     let empty_tasks: Vec<TaskParams> = Vec::new();
-    let empty_batch = pool.submit_batch(compute_task, &empty_tasks);
-
-    assert!(empty_batch.is_complete());
-    empty_batch.wait();
+    pool.submit_batch_and_wait(compute_task, &empty_tasks);
 }
 
 #[test]
@@ -102,8 +94,7 @@ fn test_worker_counts() {
             })
             .collect();
 
-        let batch = pool.submit_batch(compute_task, &tasks);
-        batch.wait();
+        pool.submit_batch_and_wait(compute_task, &tasks);
 
         for (i, &res) in results.iter().enumerate() {
             assert_eq!(
@@ -130,8 +121,7 @@ fn test_pool_lifecycle_and_recreation() {
             })
             .collect();
 
-        let batch = pool.submit_batch(compute_task, &tasks);
-        batch.wait();
+        pool.submit_batch_and_wait(compute_task, &tasks);
 
         for (i, &res) in results.iter().enumerate() {
             assert_eq!(res, (i as u64) * 2 + 1);
@@ -140,24 +130,58 @@ fn test_pool_lifecycle_and_recreation() {
 }
 
 #[test]
-fn test_wait_timeout() {
+fn test_scope() {
     let pool = ZeroPool::new();
-    let mut result = 0u64;
-
-    let params = TaskParams {
+    let mut r1 = 0u64;
+    let mut r2 = 0u64;
+    let p1 = TaskParams {
         value: 10,
-        result: &raw mut result,
+        result: &raw mut r1,
     };
-    let future = pool.submit_task(compute_task, &params);
+    let p2 = TaskParams {
+        value: 20,
+        result: &raw mut r2,
+    };
 
-    let completed = future.wait_timeout(Duration::from_secs(5));
-    assert!(completed, "Task should complete within timeout");
-    assert_eq!(result, 21);
+    pool.scope(|s| {
+        s.submit(compute_task, &p1);
+        s.submit(compute_task, &p2);
+    });
 
-    // Empty batch should return true immediately on wait_timeout
-    let empty_tasks: Vec<TaskParams> = Vec::new();
-    let empty_batch = pool.submit_batch(compute_task, &empty_tasks);
-    assert!(empty_batch.wait_timeout(Duration::from_millis(50)));
+    assert_eq!(r1, 21);
+    assert_eq!(r2, 41);
+}
+
+#[test]
+fn test_detached_submission() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
+    let pool = ZeroPool::new();
+    let done = Arc::new(AtomicBool::new(false));
+
+    struct DetachedTask {
+        done: Arc<AtomicBool>,
+    }
+
+    fn detached_fn(params: &DetachedTask) {
+        params.done.store(true, Ordering::Release);
+    }
+
+    let task = Box::new(DetachedTask { done: done.clone() });
+    let task_ptr = Box::into_raw(task);
+
+    unsafe {
+        pool.submit_detached(detached_fn, task_ptr);
+    }
+
+    while !done.load(Ordering::Acquire) {
+        std::thread::yield_now();
+    }
+
+    unsafe {
+        drop(Box::from_raw(task_ptr));
+    }
 }
 
 #[test]
@@ -176,8 +200,7 @@ fn test_consecutive_batches() {
             })
             .collect();
 
-        let batch = pool.submit_batch(compute_task, &tasks);
-        batch.wait();
+        pool.submit_batch_and_wait(compute_task, &tasks);
 
         for (i, &res) in results.iter().enumerate() {
             assert_eq!(res, ((round * 100 + i) as u64) * 2 + 1);
@@ -196,8 +219,7 @@ fn test_reclaim_trigger() {
     };
 
     for _ in 0..550 {
-        let future = pool.submit_task(compute_task, &params);
-        future.wait();
+        pool.submit_and_wait(compute_task, &params);
     }
     assert_eq!(result, 3);
 }

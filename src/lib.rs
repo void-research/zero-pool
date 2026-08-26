@@ -1,22 +1,11 @@
 //! # Zero-Pool: Ultra-High Performance Thread Pool
 //!
 //! A thread pool implementation designed for maximum performance through:
-//! - Zero-overhead task submission via raw pointers  
-//! - Result-via-parameters pattern (no result transport)
+//! - Safe scoped task execution without per-task allocation
+//! - Zero-result-transport pattern (direct writes to caller memory)
 //! - Single global queue with optimal load balancing
 //! - Function pointer dispatch (no trait objects)
 //! - Lock-free queue operations with event-based worker coordination
-//!
-//! ## Safety
-//!
-//! This library achieves high performance through raw pointer usage. Users must ensure:
-//! - Parameter structs remain valid until `TaskFuture::wait()` completes
-//! - Result pointers remain valid until task execution finishes  
-//! - Task functions take exactly one parameter (usually the task parameter struct)
-//! - Task functions are thread-safe and data-race free
-//! - No undefined behavior in unsafe task code
-//!
-//! This API is unsafe-by-contract and performs no runtime validation of these invariants.
 //!
 //! ## Example
 //!
@@ -31,8 +20,8 @@
 //!
 //! let pool = ZeroPool::new();
 //! let mut result = 0u64;
-//! let task_params = MyTaskParams { value: 42, result: &mut result };
-//! pool.submit_task(my_task, &task_params).wait();
+//! let task_params = MyTaskParams { value: 42, result: &raw mut result };
+//! pool.submit_and_wait(my_task, &task_params);
 //! assert_eq!(result, 84);
 //! ```
 
@@ -40,15 +29,15 @@ mod padded_type;
 mod pool;
 mod queue;
 mod retired_list;
+mod scope;
 mod task_batch;
-mod task_future;
 mod worker;
 
 use std::ptr::NonNull;
 use std::sync::OnceLock;
 
 pub use pool::ZeroPool;
-pub use task_future::TaskFuture;
+pub use scope::Scope;
 
 static GLOBAL_ZP: OnceLock<ZeroPool> = OnceLock::new();
 

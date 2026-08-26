@@ -25,20 +25,16 @@ fn individual_tasks(b: &mut Bencher) {
     b.iter(|| {
         let mut results = vec![0u64; INDIVIDUAL_TASK_COUNT];
         let mut tasks = Vec::with_capacity(INDIVIDUAL_TASK_COUNT);
-        let mut futures = Vec::with_capacity(INDIVIDUAL_TASK_COUNT);
 
         for result in &mut results {
             tasks.push(IndexTask { result });
         }
 
-        for task in &tasks {
-            let future = pool.submit_task(index_task_fn, task);
-            futures.push(future);
-        }
-
-        for future in futures {
-            future.wait();
-        }
+        pool.scope(|s| {
+            for task in &tasks {
+                s.submit(index_task_fn, task);
+            }
+        });
 
         black_box(results);
     });

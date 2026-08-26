@@ -30,8 +30,7 @@ fn overhead(b: &mut Bencher) {
             tasks.push(IndexTask { result });
         }
 
-        let batch = pool.submit_batch(index_task_fn, &tasks);
-        batch.wait();
+        pool.submit_batch_and_wait(index_task_fn, &tasks);
 
         black_box(results);
     });

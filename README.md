@@ -14,17 +14,15 @@ A FIFO MPMC thread pool with a single global queue and cooperative memory reclam
 - **Zero result transport cost** - tasks write directly to caller-provided memory
 - **Zero per worker queues** - single global queue structure = perfect workload balancing
 - **Zero external dependencies** - standard library only and stable rust
+- **Zero heap tracking overhead** - scoped tasks synchronize via stack-allocated counters (no `Arc` per task)
 
 Using a result-via-parameters pattern means workers place results into caller provided memory, removing thread transport overhead. The single global queue structure ensures optimal load balancing without the complexity of work-stealing or load redistribution algorithms.
 
-Because the library uses raw pointers, you must ensure parameter structs (including any pointers they contain) remain valid until task completion, and that your task functions are thread-safe.
-
-This approach allows complete freedom to optimise multi-threaded workloads any way you want.
-
 #### Notes
-- TaskFuture is easily clonable, but `wait()`/`wait_timeout()` must be called from the thread that submitted the task. `is_complete()` is safe to call from any thread.
+- **Scoped submissions** (`pool.scope`) guarantee all tasks complete before the scope exits, enabling 100% sound, safe Rust for borrowing stack variables.
+- **Synchronous helpers** (`pool.submit_and_wait`, `pool.submit_batch_and_wait`) provide zero-boilerplate execution for single tasks and batches.
+- **Detached submissions** (`unsafe pool.submit_detached`) allow fire-and-forget background tasks without waiting.
 - Zero-Pool supports both explicitly creating new thread pools (`ZeroPool::new`, `ZeroPool::with_workers`) and using the global instance (`zero_pool::global_pool`).
-- Task functions take a single parameter (e.g. `&MyTaskParams`).
 
 ## Benchmarks (AMD 5900X, Linux 7.1)
 ```rust
@@ -58,17 +56,16 @@ fn calculate_task(params: &CalculationParams) {
 
 let pool = ZeroPool::new();
 let mut result = 0u64;
-let task = CalculationParams { iterations: 1000, result: &mut result };
+let task = CalculationParams { iterations: 1000, result: &raw mut result };
 
-let future = pool.submit_task(calculate_task, &task);
-future.wait();
+pool.submit_and_wait(calculate_task, &task);
 
 println!("Result: {}", result);
 ```
 
 ### Submitting Uniform Batches
 
-Submits multiple tasks of the same type to the thread pool.
+Submits multiple tasks of the same type to the thread pool and waits for them to complete.
 
 ```rust
 use zero_pool::ZeroPool;
@@ -93,15 +90,14 @@ let tasks: Vec<_> = results.iter_mut().enumerate().map(|(i, result)| {
     ComputeParams { work_amount: 1000 + i * 10, result }
 }).collect();
 
-let future = pool.submit_batch(compute_task, &tasks);
-future.wait();
+pool.submit_batch_and_wait(compute_task, &tasks);
 
 println!("First result: {}", results[0]);
 ```
 
-### Submitting Multiple Independent Tasks
+### Submitting Multiple Concurrent Tasks with Scopes
 
-You can submit individual tasks and uniform batches in parallel:
+You can submit individual tasks and uniform batches in parallel within a scope. Workers immediately execute available tasks concurrently across the pool, and all tasks are automatically joined at the end of the scope:
 
 ```rust
 use zero_pool::ZeroPool;
@@ -131,7 +127,7 @@ let pool = ZeroPool::new();
 
 // Individual task
 let mut single_result = 0u64;
-let single_task_params = ComputeParams { work_amount: 1000, result: &mut single_result };
+let single_task_params = ComputeParams { work_amount: 1000, result: &raw mut single_result };
 
 // Uniform batch
 let mut batch_results = vec![0u64; 50];
@@ -139,16 +135,31 @@ let batch_task_params: Vec<_> = batch_results.iter_mut().enumerate()
     .map(|(i, result)| ComputeParams { work_amount: 500 + i, result })
     .collect();
 
-// Submit all batches
-let future1 = pool.submit_task(compute_task, &single_task_params);
-let future2 = pool.submit_batch(compute_task, &batch_task_params);
-
-// Wait on them in any order; completion order is not guaranteed
-future1.wait();
-future2.wait(); 
+pool.scope(|s| {
+    s.submit(compute_task, &single_task_params);
+    s.submit_batch(compute_task, &batch_task_params);
+    // Both run concurrently across workers!
+    // Scope waits for everything before returning.
+});
 
 println!("Single: {}", single_result);
 println!("Batch completed: {} tasks", batch_results.len());
+```
+
+### Multi-Phase Coordination
+
+You can call `s.wait()` mid-scope to synchronize between distinct computation phases:
+
+```rust
+pool.scope(|s| {
+    // Phase 1
+    s.submit(phase1_task, &phase1_params);
+    s.wait(); // Wait for Phase 1 to finish
+
+    // Phase 2 (can use outputs from Phase 1)
+    s.submit(phase2_task, &phase2_params);
+    // Automatically waited for at scope exit
+});
 ```
 
 ### Using the Global Pool
@@ -172,9 +183,9 @@ fn example_task(params: &ExampleParams) {
 }
 
 let mut result = 0u64;
-let params = ExampleParams { work: 1_000, result: &mut result };
+let params = ExampleParams { work: 1_000, result: &raw mut result };
 
-global_pool().submit_task(example_task, &params).wait();
+global_pool().submit_and_wait(example_task, &params);
 
 println!("Result: {}", result);
 ```

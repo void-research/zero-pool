@@ -1,7 +1,8 @@
 use crate::padded_type::PaddedType;
 use crate::retired_list::RetiredList;
+use crate::scope::CompletionHandle;
 use crate::task_batch::TaskBatch;
-use crate::{TaskFnPointer, TaskFuture, TaskParamPointer};
+use crate::{TaskFnPointer, TaskParamPointer};
 use std::ptr::NonNull;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicUsize, Ordering, fence};
@@ -28,7 +29,7 @@ pub struct Queue {
 impl Queue {
     pub fn new(worker_count: usize) -> Self {
         fn noop(_: TaskParamPointer) {}
-        let anchor = TaskBatch::new(noop, NonNull::dangling(), 0, 0, TaskFuture::new(0));
+        let anchor = TaskBatch::new(noop, NonNull::dangling(), 0, 0, None);
 
         let local_epochs = (0..worker_count)
             .map(|_| PaddedType::new(AtomicUsize::new(NOT_IN_CRITICAL)))
@@ -51,27 +52,23 @@ impl Queue {
         }
     }
 
-    pub fn push_task_batch<T>(&self, task_fn: fn(&T), params: &[T]) -> TaskFuture {
-        if params.is_empty() {
-            return TaskFuture::new(0);
-        }
-
-        let future = TaskFuture::new(params.len());
-
+    pub fn push_task_batch(
+        &self,
+        task_fn: TaskFnPointer,
+        params_ptr: TaskParamPointer,
+        param_stride: usize,
+        params_total_bytes: usize,
+        count: usize,
+        completion: Option<CompletionHandle>,
+    ) {
         let batch = TaskBatch::new(
-            unsafe { std::mem::transmute::<fn(&T), TaskFnPointer>(task_fn) },
-            NonNull::from(params).cast(),
-            std::mem::size_of::<T>(),
-            std::mem::size_of_val(params),
-            future.clone(),
+            task_fn,
+            params_ptr,
+            param_stride,
+            params_total_bytes,
+            completion,
         );
 
-        self.link_and_notify(batch, params.len());
-
-        future
-    }
-
-    fn link_and_notify(&self, batch: *mut TaskBatch, count: usize) {
         let prev_tail = self.tail.swap(batch, Ordering::Release);
         unsafe {
             (*prev_tail).next.store(batch, Ordering::Release);

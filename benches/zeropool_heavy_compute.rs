@@ -56,8 +56,7 @@ fn heavy_compute(b: &mut Bencher) {
             });
         }
 
-        let batch = pool.submit_batch(heavy_compute_task_fn, &tasks);
-        batch.wait();
+        pool.submit_batch_and_wait(heavy_compute_task_fn, &tasks);
 
         black_box(results);
     });
