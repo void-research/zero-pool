@@ -97,6 +97,7 @@ impl ZeroPool {
     /// assert_eq!(r1, 20);
     /// assert_eq!(r2, 40);
     /// ```
+    #[inline]
     pub fn scope<'env, F, R>(&'env self, f: F) -> R
     where
         F: for<'scope> FnOnce(&'scope Scope<'scope, 'env>) -> R,

@@ -33,6 +33,7 @@ impl<'scope, 'env> Scope<'scope, 'env> {
     }
 
     /// Submits a batch of uniform tasks to the pool within this scope.
+    #[inline]
     pub fn submit_batch<T: 'scope>(&self, task_fn: fn(&T), params: &'scope [T]) {
         if params.is_empty() {
             return;
