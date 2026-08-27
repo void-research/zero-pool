@@ -102,10 +102,8 @@ impl ZeroPool {
         F: for<'scope> FnOnce(&'scope Scope<'scope, 'env>) -> R,
     {
         let scope = Scope::new(&self.queue);
-        let guard = ScopeGuard::new(&scope);
-        let result = f(&scope);
-        drop(guard);
-        result
+        let _guard = ScopeGuard(&scope);
+        f(&scope)
     }
 
     /// Submits a single typed task and waits for it to complete.
@@ -171,6 +169,7 @@ impl ZeroPool {
     ///
     /// The caller must ensure that the memory pointed to by `param` remains valid
     /// until the worker thread has finished executing the task function.
+    #[inline]
     pub unsafe fn submit_detached<T>(&self, task_fn: fn(&T), param: *const T) {
         unsafe {
             self.submit_detached_batch(task_fn, param, 1);
@@ -183,6 +182,7 @@ impl ZeroPool {
     ///
     /// The caller must ensure that the memory pointed to by `params` remains valid
     /// until all `count` tasks have finished executing.
+    #[inline]
     pub unsafe fn submit_detached_batch<T>(&self, task_fn: fn(&T), params: *const T, count: usize) {
         if count == 0 || params.is_null() {
             return;
@@ -195,6 +195,7 @@ impl ZeroPool {
                 std::mem::size_of::<T>(),
                 std::mem::size_of::<T>() * count,
                 count,
+                std::ptr::null(),
                 None,
             );
         }

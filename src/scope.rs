@@ -5,12 +5,6 @@ use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread::{self, Thread};
 
-/// Internal handle to the completion tracking state.
-pub(crate) struct CompletionHandle {
-    pub counter: *const AtomicUsize,
-    pub thread: Thread,
-}
-
 /// A scope for spawning concurrent tasks that borrow from the local stack.
 ///
 /// Tasks spawned via a `Scope` are guaranteed to complete before [`ZeroPool::scope`](crate::ZeroPool::scope)
@@ -19,7 +13,7 @@ pub struct Scope<'scope, 'env: 'scope> {
     queue: &'env Queue,
     counter: AtomicUsize,
     thread: Thread,
-    _marker: PhantomData<&'scope ()>,
+    _marker: PhantomData<(&'scope mut &'scope (), &'env mut &'env ())>,
 }
 
 impl<'scope, 'env> Scope<'scope, 'env> {
@@ -46,18 +40,14 @@ impl<'scope, 'env> Scope<'scope, 'env> {
 
         self.counter.fetch_add(params.len(), Ordering::Relaxed);
 
-        let completion = CompletionHandle {
-            counter: &self.counter as *const AtomicUsize,
-            thread: self.thread.clone(),
-        };
-
         self.queue.push_task_batch(
             unsafe { std::mem::transmute::<fn(&T), TaskFnPointer>(task_fn) },
             NonNull::from(params).cast(),
             std::mem::size_of::<T>(),
             std::mem::size_of_val(params),
             params.len(),
-            Some(completion),
+            &self.counter,
+            Some(self.thread.clone()),
         );
     }
 
@@ -82,13 +72,7 @@ impl<'scope, 'env> Scope<'scope, 'env> {
 }
 
 /// Guard ensuring all scoped tasks complete even if unwinding due to a panic.
-pub(crate) struct ScopeGuard<'s, 'scope, 'env>(&'s Scope<'scope, 'env>);
-
-impl<'s, 'scope, 'env> ScopeGuard<'s, 'scope, 'env> {
-    pub fn new(scope: &'s Scope<'scope, 'env>) -> Self {
-        Self(scope)
-    }
-}
+pub(crate) struct ScopeGuard<'s, 'scope, 'env>(pub &'s Scope<'scope, 'env>);
 
 impl Drop for ScopeGuard<'_, '_, '_> {
     fn drop(&mut self) {

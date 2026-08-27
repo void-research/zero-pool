@@ -153,6 +153,54 @@ fn test_scope() {
 }
 
 #[test]
+fn test_scope_wait_and_is_complete() {
+    let pool = ZeroPool::new();
+    let mut r1 = 0u64;
+    let mut r2 = 0u64;
+    let p1 = TaskParams {
+        value: 5,
+        result: &raw mut r1,
+    };
+    let mut p2 = TaskParams {
+        value: 0,
+        result: &raw mut r2,
+    };
+
+    pool.scope(|s| {
+        s.submit(compute_task, &p1);
+        s.wait();
+        assert!(s.is_complete());
+
+        // Phase 2 using phase 1's output
+        p2.value = unsafe { *p1.result };
+        s.submit(compute_task, &p2);
+    });
+
+    assert_eq!(r1, 11);
+    assert_eq!(r2, 23);
+}
+
+#[test]
+fn test_scope_panic_safety() {
+    let pool = ZeroPool::new();
+    let mut r1 = 0u64;
+    let p1 = TaskParams {
+        value: 10,
+        result: &raw mut r1,
+    };
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        pool.scope(|s| {
+            s.submit(compute_task, &p1);
+            panic!("intentional panic inside scope");
+        });
+    }));
+
+    assert!(result.is_err());
+    assert_eq!(r1, 21, "Task should complete even when scope closure panics");
+}
+
+#[test]
 fn test_detached_submission() {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;

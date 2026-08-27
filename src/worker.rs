@@ -25,14 +25,7 @@ pub fn spawn_worker(id: usize, queue: Arc<Queue>) -> JoinHandle<()> {
                         completed += 1;
                     }
 
-                    if let Some(completion) = &batch.completion {
-                        let counter_done = unsafe {
-                            (*completion.counter).fetch_sub(completed, std::sync::atomic::Ordering::AcqRel) == completed
-                        };
-                        if counter_done {
-                            completion.thread.unpark();
-                        }
-                    }
+                    batch.complete_many(completed);
 
                     retired.try_clean(&queue);
                 }

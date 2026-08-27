@@ -1,18 +1,17 @@
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
+use std::thread::Thread;
 
-use crate::{
-    TaskFnPointer, TaskParamPointer, padded_type::PaddedType, scope::CompletionHandle,
-};
+use crate::{TaskFnPointer, TaskParamPointer, padded_type::PaddedType};
 
 pub struct TaskBatch {
     next_byte_offset: PaddedType<AtomicUsize>,
-    // pointer arithmetic instead of usize address math to preserve pointer provenance
     pub next: PaddedType<AtomicPtr<TaskBatch>>,
     pub fn_ptr: TaskFnPointer,
     params_ptr: TaskParamPointer,
     param_stride: usize,
     params_total_bytes: usize,
-    pub completion: Option<CompletionHandle>,
+    counter: *const AtomicUsize,
+    thread: Option<Thread>,
     // used only by thread that takes ownership for reclamation
     // but because of retagging/aliasing rules needs either unsafecell or atomic to pass MIRI.
     // should be the same machine instruction regardless of choice with Relaxed ordering.
@@ -26,7 +25,8 @@ impl TaskBatch {
         params_ptr: TaskParamPointer,
         param_stride: usize,
         params_total_bytes: usize,
-        completion: Option<CompletionHandle>,
+        counter: *const AtomicUsize,
+        thread: Option<Thread>,
     ) -> *mut Self {
         Box::into_raw(Box::new(TaskBatch {
             next_byte_offset: PaddedType::new(AtomicUsize::new(0)),
@@ -35,10 +35,20 @@ impl TaskBatch {
             params_ptr,
             param_stride,
             params_total_bytes,
-            completion,
+            counter,
+            thread,
             retired_epoch: AtomicUsize::new(0),
             retired_next: AtomicPtr::new(std::ptr::null_mut()),
         }))
+    }
+
+    pub fn complete_many(&self, count: usize) {
+        if !self.counter.is_null()
+            && unsafe { (*self.counter).fetch_sub(count, Ordering::Release) } == count
+            && let Some(thread) = &self.thread
+        {
+            thread.unpark();
+        }
     }
 
     pub fn claim_next_param(&self) -> Option<TaskParamPointer> {
