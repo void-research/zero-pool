@@ -10,8 +10,7 @@ pub struct TaskBatch {
     params_ptr: TaskParamPointer,
     param_stride: usize,
     params_total_bytes: usize,
-    counter: *const AtomicUsize,
-    thread: Option<Thread>,
+    waiter: Option<(*const AtomicUsize, Thread)>,
     // used only by thread that takes ownership for reclamation
     // but because of retagging/aliasing rules needs either unsafecell or atomic to pass MIRI.
     // should be the same machine instruction regardless of choice with Relaxed ordering.
@@ -25,8 +24,7 @@ impl TaskBatch {
         params_ptr: TaskParamPointer,
         param_stride: usize,
         params_total_bytes: usize,
-        counter: *const AtomicUsize,
-        thread: Option<Thread>,
+        waiter: Option<(*const AtomicUsize, Thread)>,
     ) -> *mut Self {
         Box::into_raw(Box::new(TaskBatch {
             next_byte_offset: PaddedType(AtomicUsize::new(0)),
@@ -35,17 +33,15 @@ impl TaskBatch {
             params_ptr,
             param_stride,
             params_total_bytes,
-            counter,
-            thread,
+            waiter,
             retired_epoch: AtomicUsize::new(0),
             retired_next: AtomicPtr::new(std::ptr::null_mut()),
         }))
     }
 
     pub fn complete_many(&self, count: usize) {
-        if !self.counter.is_null()
-            && unsafe { (*self.counter).fetch_sub(count, Ordering::Release) } == count
-            && let Some(thread) = &self.thread
+        if let Some((counter, thread)) = &self.waiter
+            && unsafe { (**counter).fetch_sub(count, Ordering::Release) } == count
         {
             thread.unpark();
         }

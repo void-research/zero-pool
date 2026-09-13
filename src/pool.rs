@@ -123,8 +123,7 @@ impl ZeroPool {
     #[inline]
     pub unsafe fn run_detached<T>(&self, task_fn: fn(&T), params: *const [T]) {
         unsafe {
-            self.queue
-                .push_task_batch(task_fn, params, std::ptr::null(), None);
+            self.queue.push_task_batch(task_fn, params, None);
         }
     }
 }

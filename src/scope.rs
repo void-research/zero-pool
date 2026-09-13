@@ -35,8 +35,7 @@ impl<'scope, 'env> Scope<'scope, 'env> {
             self.queue.push_task_batch(
                 task_fn,
                 params,
-                &raw const self.counter,
-                Some(self.thread.clone()),
+                Some((&raw const self.counter, self.thread.clone())),
             );
         }
     }

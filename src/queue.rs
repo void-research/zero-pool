@@ -27,7 +27,7 @@ pub struct Queue {
 impl Queue {
     pub fn new(worker_count: usize) -> Self {
         fn noop(_: TaskParamPointer) {}
-        let anchor = TaskBatch::new(noop, NonNull::dangling(), 0, 0, std::ptr::null(), None);
+        let anchor = TaskBatch::new(noop, NonNull::dangling(), 0, 0, None);
 
         let local_epochs = (0..worker_count)
             .map(|_| PaddedType(AtomicUsize::new(NOT_IN_CRITICAL)))
@@ -54,8 +54,7 @@ impl Queue {
         &self,
         task_fn: fn(&T),
         params: *const [T],
-        counter: *const AtomicUsize,
-        thread: Option<Thread>,
+        waiter: Option<(*const AtomicUsize, Thread)>,
     ) {
         let count = params.len();
         if count == 0 {
@@ -67,8 +66,7 @@ impl Queue {
             unsafe { NonNull::new_unchecked(params.cast::<T>().cast_mut()) }.cast(),
             std::mem::size_of::<T>(),
             std::mem::size_of::<T>() * count,
-            counter,
-            thread,
+            waiter,
         );
 
         self.enqueue_batch(batch, count);
