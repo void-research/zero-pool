@@ -14,7 +14,7 @@ struct IndexTask {
 
 fn index_task_fn(params: &IndexTask) {
     unsafe {
-        *params.result = 42u64;
+        *params.result = 42;
     }
 }
 
@@ -23,7 +23,7 @@ fn individual_tasks(b: &mut Bencher) {
     let pool = ZeroPool::new();
 
     b.iter(|| {
-        let mut results = vec![0u64; INDIVIDUAL_TASK_COUNT];
+        let mut results = vec![0; INDIVIDUAL_TASK_COUNT];
         let mut tasks = Vec::with_capacity(INDIVIDUAL_TASK_COUNT);
 
         for result in &mut results {
@@ -32,7 +32,7 @@ fn individual_tasks(b: &mut Bencher) {
 
         pool.scope(|s| {
             for task in &tasks {
-                s.submit(index_task_fn, task);
+                s.run(index_task_fn, std::slice::from_ref(task));
             }
         });
 

@@ -14,7 +14,7 @@ fn overhead(b: &mut Bencher) {
 
     b.iter(|| {
         let results: Vec<u64> =
-            pool.install(|| (0..TASK_COUNT).into_par_iter().map(|_| 42u64).collect());
+            pool.install(|| (0..TASK_COUNT).into_par_iter().map(|_| 42).collect());
 
         black_box(results);
     });

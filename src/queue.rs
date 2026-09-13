@@ -1,7 +1,6 @@
-use crate::padded_type::PaddedType;
 use crate::retired_list::RetiredList;
 use crate::task_batch::TaskBatch;
-use crate::{TaskFnPointer, TaskParamPointer};
+use crate::{PaddedType, TaskFnPointer, TaskParamPointer};
 use std::ptr::NonNull;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicUsize, Ordering, fence};
@@ -31,19 +30,19 @@ impl Queue {
         let anchor = TaskBatch::new(noop, NonNull::dangling(), 0, 0, std::ptr::null(), None);
 
         let local_epochs = (0..worker_count)
-            .map(|_| PaddedType::new(AtomicUsize::new(NOT_IN_CRITICAL)))
+            .map(|_| PaddedType(AtomicUsize::new(NOT_IN_CRITICAL)))
             .collect();
 
         let worker_states = (0..worker_count)
-            .map(|_| PaddedType::new(AtomicU8::new(STATE_RUNNING)))
+            .map(|_| PaddedType(AtomicU8::new(STATE_RUNNING)))
             .collect();
 
         let threads = (0..worker_count).map(|_| OnceLock::new()).collect();
 
         Queue {
-            head: PaddedType::new(AtomicPtr::new(anchor)),
-            tail: PaddedType::new(AtomicPtr::new(anchor)),
-            global_epoch: PaddedType::new(AtomicUsize::new(0)),
+            head: PaddedType(AtomicPtr::new(anchor)),
+            tail: PaddedType(AtomicPtr::new(anchor)),
+            global_epoch: PaddedType(AtomicUsize::new(0)),
             local_epochs,
             worker_states,
             threads,
@@ -51,25 +50,31 @@ impl Queue {
         }
     }
 
-    pub fn push_task_batch(
+    pub unsafe fn push_task_batch<T>(
         &self,
-        task_fn: TaskFnPointer,
-        params_ptr: TaskParamPointer,
-        param_stride: usize,
-        params_total_bytes: usize,
-        count: usize,
+        task_fn: fn(&T),
+        params: *const [T],
         counter: *const AtomicUsize,
         thread: Option<Thread>,
     ) {
+        let count = params.len();
+        if count == 0 {
+            return;
+        }
+
         let batch = TaskBatch::new(
-            task_fn,
-            params_ptr,
-            param_stride,
-            params_total_bytes,
+            unsafe { std::mem::transmute::<fn(&T), TaskFnPointer>(task_fn) },
+            unsafe { NonNull::new_unchecked(params.cast::<T>().cast_mut()) }.cast(),
+            std::mem::size_of::<T>(),
+            std::mem::size_of::<T>() * count,
             counter,
             thread,
         );
 
+        self.enqueue_batch(batch, count);
+    }
+
+    fn enqueue_batch(&self, batch: *mut TaskBatch, count: usize) {
         let prev_tail = self.tail.swap(batch, Ordering::Release);
         unsafe {
             (*prev_tail).next.store(batch, Ordering::Release);

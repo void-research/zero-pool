@@ -1,12 +1,10 @@
 use crate::{
-    TaskFnPointer,
     queue::Queue,
     scope::{Scope, ScopeGuard},
     worker::spawn_worker,
 };
 use std::{
     num::NonZeroUsize,
-    ptr::NonNull,
     sync::Arc,
     thread::{self, JoinHandle},
 };
@@ -51,7 +49,6 @@ impl ZeroPool {
     #[must_use]
     pub fn with_workers(worker_count: NonZeroUsize) -> Self {
         let worker_count = worker_count.get();
-
         let queue = Arc::new(Queue::new(worker_count));
 
         let workers = (0..worker_count)
@@ -65,33 +62,26 @@ impl ZeroPool {
         ZeroPool { queue, workers }
     }
 
-    /// Creates a scope for executing concurrent tasks on this pool.
+    /// Creates a scope for executing concurrent tasks that can borrow from the stack.
     ///
-    /// Tasks submitted via [`Scope::submit`] or [`Scope::submit_batch`] can safely borrow
-    /// from the caller's stack frame, and are guaranteed to complete before `scope` returns.
-    ///
-    /// If the closure panics, the scope waits for all currently running tasks to finish
-    /// before unwinding to preserve memory safety.
-    ///
-    /// # Examples
+    /// All tasks are guaranteed to complete before `scope` returns, even on panic.
     ///
     /// ```rust
     /// use zero_pool::ZeroPool;
     ///
-    /// struct TaskParams { value: u64, result: *mut u64 }
-    /// fn compute(params: &TaskParams) {
-    ///     unsafe { *params.result = params.value * 2; }
-    /// }
+    /// struct Params { value: u64, result: *mut u64 }
+    /// fn compute(p: &Params) { unsafe { *p.result = p.value * 2; } }
     ///
     /// let pool = ZeroPool::new();
     /// let mut r1 = 0;
     /// let mut r2 = 0;
-    /// let p1 = TaskParams { value: 10, result: &raw mut r1 };
-    /// let p2 = TaskParams { value: 20, result: &raw mut r2 };
+    ///
+    /// let p1 = [Params { value: 10, result: &raw mut r1 }];
+    /// let p2 = [Params { value: 20, result: &raw mut r2 }];
     ///
     /// pool.scope(|s| {
-    ///     s.submit(compute, &p1);
-    ///     s.submit(compute, &p2);
+    ///     s.run(compute, &p1);
+    ///     s.run(compute, &p2);
     /// });
     ///
     /// assert_eq!(r1, 20);
@@ -107,98 +97,34 @@ impl ZeroPool {
         f(&scope)
     }
 
-    /// Submits a single typed task and waits for it to complete.
-    ///
-    /// This is safe because `param` is guaranteed to outlive task execution.
-    ///
-    /// # Examples
+    /// Submits tasks and waits for all to complete.
     ///
     /// ```rust
     /// use zero_pool::ZeroPool;
     ///
-    /// struct TaskParams { value: u64, result: *mut u64 }
-    /// fn compute(params: &TaskParams) {
-    ///     unsafe { *params.result = params.value * 2; }
-    /// }
+    /// struct Params { value: u64, result: *mut u64 }
+    /// fn compute(p: &Params) { unsafe { *p.result = p.value * 2; } }
     ///
     /// let pool = ZeroPool::new();
     /// let mut result = 0;
-    /// let params = TaskParams { value: 42, result: &raw mut result };
-    ///
-    /// pool.submit_and_wait(compute, &params);
+    /// pool.run(compute, &[Params { value: 42, result: &raw mut result }]);
     /// assert_eq!(result, 84);
     /// ```
     #[inline]
-    pub fn submit_and_wait<T>(&self, task_fn: fn(&T), param: &T) {
-        self.scope(|s| s.submit(task_fn, param));
+    pub fn run<T>(&self, task_fn: fn(&T), params: &[T]) {
+        self.scope(|s| s.run(task_fn, params));
     }
 
-    /// Submits a batch of uniform tasks and waits for all of them to complete.
-    ///
-    /// All tasks in the batch are executed concurrently across worker threads.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use zero_pool::ZeroPool;
-    ///
-    /// struct TaskParams { value: u64, result: *mut u64 }
-    /// fn compute(params: &TaskParams) {
-    ///     unsafe { *params.result = params.value * 2; }
-    /// }
-    ///
-    /// let pool = ZeroPool::new();
-    /// let mut results = vec![0u64; 100];
-    /// let tasks: Vec<_> = results
-    ///     .iter_mut()
-    ///     .enumerate()
-    ///     .map(|(i, res)| TaskParams { value: i as u64, result: res })
-    ///     .collect();
-    ///
-    /// pool.submit_batch_and_wait(compute, &tasks);
-    /// assert_eq!(results[0], 0);
-    /// assert_eq!(results[99], 198);
-    /// ```
-    #[inline]
-    pub fn submit_batch_and_wait<T>(&self, task_fn: fn(&T), params: &[T]) {
-        self.scope(|s| s.submit_batch(task_fn, params));
-    }
-
-    /// Submits a single task without tracking or waiting for its completion.
+    /// Submits tasks without waiting for completion.
     ///
     /// # Safety
     ///
-    /// The caller must ensure that the memory pointed to by `param` remains valid
-    /// until the worker thread has finished executing the task function.
+    /// The caller must ensure that `params` remains valid until all tasks finish.
     #[inline]
-    pub unsafe fn submit_detached<T>(&self, task_fn: fn(&T), param: *const T) {
+    pub unsafe fn run_detached<T>(&self, task_fn: fn(&T), params: *const [T]) {
         unsafe {
-            self.submit_detached_batch(task_fn, param, 1);
-        }
-    }
-
-    /// Submits a batch of uniform tasks without tracking or waiting for their completion.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure that the memory pointed to by `params` remains valid
-    /// until all `count` tasks have finished executing.
-    #[inline]
-    pub unsafe fn submit_detached_batch<T>(&self, task_fn: fn(&T), params: *const T, count: usize) {
-        if count == 0 || params.is_null() {
-            return;
-        }
-
-        unsafe {
-            self.queue.push_task_batch(
-                std::mem::transmute::<fn(&T), TaskFnPointer>(task_fn),
-                NonNull::new_unchecked(params as *mut T).cast(),
-                std::mem::size_of::<T>(),
-                std::mem::size_of::<T>() * count,
-                count,
-                std::ptr::null(),
-                None,
-            );
+            self.queue
+                .push_task_batch(task_fn, params, std::ptr::null(), None);
         }
     }
 }

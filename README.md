@@ -19,9 +19,7 @@ A FIFO MPMC thread pool with a single global queue and cooperative memory reclam
 Using a result-via-parameters pattern means workers place results into caller provided memory, removing thread transport overhead. The single global queue structure ensures optimal load balancing without the complexity of work-stealing or load redistribution algorithms.
 
 #### Notes
-- **Scoped submissions** (`pool.scope`) guarantee all tasks complete before the scope exits, enabling 100% sound, safe Rust for borrowing stack variables.
-- **Synchronous helpers** (`pool.submit_and_wait`, `pool.submit_batch_and_wait`) provide zero-boilerplate execution for single tasks and batches.
-- **Detached submissions** (`unsafe pool.submit_detached`) allow fire-and-forget background tasks without waiting.
+- **`pool.run_detached`** allows fire-and-forget background tasks without waiting.
 - Zero-Pool supports both explicitly creating new thread pools (`ZeroPool::new`, `ZeroPool::with_workers`) and using the global instance (`zero_pool::global_pool`).
 
 ## Benchmarks (AMD 5900X, Linux 7.1)
@@ -36,156 +34,94 @@ zeropool_task_overhead     .     31,169.77 ns/iter (+/- 2,899.86)
 
 ## Example Usage
 
-### Submitting a Single Task
+### Running Tasks
 
 ```rust
 use zero_pool::ZeroPool;
 
-struct CalculationParams {
-    iterations: usize,
-    result: *mut u64,
-}
+struct Params { iterations: usize, result: *mut u64 }
 
-fn calculate_task(params: &CalculationParams) {
-    let mut sum = 0u64;
-    for i in 0..params.iterations {
-        sum += i as u64;
-    }
+fn compute(params: &Params) {
+    let mut sum = 0;
+    for i in 0..params.iterations { sum += i as u64; }
     unsafe { *params.result = sum; }
 }
 
 let pool = ZeroPool::new();
-let mut result = 0u64;
-let task = CalculationParams { iterations: 1000, result: &raw mut result };
 
-pool.submit_and_wait(calculate_task, &task);
-
+// Single task
+let mut result = 0;
+pool.run(compute, &[Params { iterations: 1000, result: &raw mut result }]);
 println!("Result: {}", result);
-```
 
-### Submitting Uniform Batches
-
-Submits multiple tasks of the same type to the thread pool and waits for them to complete.
-
-```rust
-use zero_pool::ZeroPool;
-
-struct ComputeParams {
-    work_amount: usize,
-    result: *mut u64,
-}
-
-fn compute_task(params: &ComputeParams) {
-    let mut sum = 0u64;
-    for i in 0..params.work_amount {
-        sum += i as u64;
-    }
-    unsafe { *params.result = sum; }
-}
-
-let pool = ZeroPool::new();
-let mut results = vec![0u64; 100];
-
-let tasks: Vec<_> = results.iter_mut().enumerate().map(|(i, result)| {
-    ComputeParams { work_amount: 1000 + i * 10, result }
+// Batch
+let mut results = vec![0; 100];
+let tasks: Vec<_> = results.iter_mut().enumerate().map(|(i, r)| {
+    Params { iterations: 1000 + i * 10, result: r }
 }).collect();
 
-pool.submit_batch_and_wait(compute_task, &tasks);
-
+pool.run(compute, &tasks);
 println!("First result: {}", results[0]);
 ```
 
-### Submitting Multiple Concurrent Tasks with Scopes
+### Scoped Concurrent Tasks
 
-You can submit individual tasks and uniform batches in parallel within a scope. Workers immediately execute available tasks concurrently across the pool, and all tasks are automatically joined at the end of the scope:
+Submit tasks of different types concurrently within a scope. All tasks are joined at scope exit:
 
 ```rust
 use zero_pool::ZeroPool;
 
-// Define first task type
-struct ComputeParams {
-    work_amount: usize,
-    result: *mut u64,
-}
-
+struct ComputeParams { work_amount: usize, result: *mut u64 }
 fn compute_task(params: &ComputeParams) {
-    let mut sum = 0u64;
-    for i in 0..params.work_amount {
-        sum += i as u64;
-    }
+    let mut sum = 0;
+    for i in 0..params.work_amount { sum += i as u64; }
     unsafe { *params.result = sum; }
 }
 
-// Define second task type
 struct MultiplyParams { x: u64, y: u64, result: *mut u64 }
-
 fn multiply_task(params: &MultiplyParams) {
     unsafe { *params.result = params.x * params.y; }
 }
 
 let pool = ZeroPool::new();
-
-// Individual task
-let mut single_result = 0u64;
-let single_task_params = ComputeParams { work_amount: 1000, result: &raw mut single_result };
-
-// Uniform batch
-let mut batch_results = vec![0u64; 50];
-let batch_task_params: Vec<_> = batch_results.iter_mut().enumerate()
-    .map(|(i, result)| ComputeParams { work_amount: 500 + i, result })
-    .collect();
+let mut compute_result = 0;
+let mut multiply_result = 0;
 
 pool.scope(|s| {
-    s.submit(compute_task, &single_task_params);
-    s.submit_batch(compute_task, &batch_task_params);
-    // Both run concurrently across workers!
-    // Scope waits for everything before returning.
+    // Both tasks are queued and execute in parallel
+    s.run(compute_task, &[ComputeParams { work_amount: 1000, result: &raw mut compute_result }]);
+    s.run(multiply_task, &[MultiplyParams { x: 6, y: 7, result: &raw mut multiply_result }]);
 });
 
-println!("Single: {}", single_result);
-println!("Batch completed: {} tasks", batch_results.len());
+println!("Compute: {}, Multiply: {}", compute_result, multiply_result);
 ```
 
 ### Multi-Phase Coordination
 
-You can call `s.wait()` mid-scope to synchronize between distinct computation phases:
+Call `s.wait()` mid-scope to synchronize between computation phases:
 
 ```rust
 pool.scope(|s| {
-    // Phase 1
-    s.submit(phase1_task, &phase1_params);
-    s.wait(); // Wait for Phase 1 to finish
-
-    // Phase 2 (can use outputs from Phase 1)
-    s.submit(phase2_task, &phase2_params);
-    // Automatically waited for at scope exit
+    s.run(phase1_task, &phase1_params);
+    s.wait();
+    // Phase 2 can use outputs from Phase 1
+    s.run(phase2_task, &phase2_params);
 });
 ```
 
 ### Using the Global Pool
 
-If you prefer to share a single pool across your entire application, call the global accessor. The pool is created on first use and lives for the duration of the process.
-
 ```rust
 use zero_pool::global_pool;
 
-struct ExampleParams {
-    work: usize,
-    result: *mut u64,
+struct Params { work: usize, result: *mut u64 }
+fn task(p: &Params) {
+    let mut sum = 0;
+    for i in 0..p.work { sum = sum.wrapping_add(i as u64); }
+    unsafe { *p.result = sum; }
 }
 
-fn example_task(params: &ExampleParams) {
-    let mut sum = 0u64;
-    for i in 0..params.work {
-        sum = sum.wrapping_add(i as u64);
-    }
-    unsafe { *params.result = sum; }
-}
-
-let mut result = 0u64;
-let params = ExampleParams { work: 1_000, result: &raw mut result };
-
-global_pool().submit_and_wait(example_task, &params);
-
+let mut result = 0;
+global_pool().run(task, &[Params { work: 1_000, result: &raw mut result }]);
 println!("Result: {}", result);
 ```

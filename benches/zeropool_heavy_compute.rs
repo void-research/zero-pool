@@ -14,7 +14,7 @@ struct HeavyComputeTask {
 }
 
 fn heavy_compute_task_fn(params: &HeavyComputeTask) {
-    let mut sum = 0u64;
+    let mut sum: u64 = 0;
     let mut x = params.seed;
 
     for _ in 0..HEAVY_COMPUTE_WORK_AMOUNT {
@@ -46,7 +46,7 @@ fn heavy_compute(b: &mut Bencher) {
         .collect();
 
     b.iter(|| {
-        let mut results = vec![0u64; TASK_COUNT];
+        let mut results = vec![0; TASK_COUNT];
 
         let mut tasks = Vec::with_capacity(TASK_COUNT);
         for (i, res) in results.iter_mut().enumerate() {
@@ -56,7 +56,7 @@ fn heavy_compute(b: &mut Bencher) {
             });
         }
 
-        pool.submit_batch_and_wait(heavy_compute_task_fn, &tasks);
+        pool.run(heavy_compute_task_fn, &tasks);
 
         black_box(results);
     });

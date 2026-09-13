@@ -25,7 +25,7 @@ fn heavy_compute(b: &mut Bencher) {
             seeds
                 .par_iter()
                 .map(|&seed| {
-                    let mut sum = 0u64;
+                    let mut sum: u64 = 0;
                     let mut x = seed;
 
                     for _ in 0..HEAVY_COMPUTE_WORK_AMOUNT {

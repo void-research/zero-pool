@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::thread::Thread;
 
-use crate::{TaskFnPointer, TaskParamPointer, padded_type::PaddedType};
+use crate::{PaddedType, TaskFnPointer, TaskParamPointer};
 
 pub struct TaskBatch {
     next_byte_offset: PaddedType<AtomicUsize>,
@@ -29,8 +29,8 @@ impl TaskBatch {
         thread: Option<Thread>,
     ) -> *mut Self {
         Box::into_raw(Box::new(TaskBatch {
-            next_byte_offset: PaddedType::new(AtomicUsize::new(0)),
-            next: PaddedType::new(AtomicPtr::new(std::ptr::null_mut())),
+            next_byte_offset: PaddedType(AtomicUsize::new(0)),
+            next: PaddedType(AtomicPtr::new(std::ptr::null_mut())),
             fn_ptr,
             params_ptr,
             param_stride,
