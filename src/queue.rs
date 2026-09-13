@@ -83,8 +83,8 @@ impl Queue {
         let mut remaining = count.min(self.threads.len());
 
         for (state, thread_oncelock) in self.worker_states.iter().zip(self.threads.iter()) {
-            if let Some(thread) = thread_oncelock.get()
-                && state.swap(STATE_NOTIFIED, Ordering::Release) == STATE_SLEEPING
+            if state.swap(STATE_NOTIFIED, Ordering::Release) == STATE_SLEEPING
+                && let Some(thread) = thread_oncelock.get()
             {
                 thread.unpark();
                 remaining -= 1;
