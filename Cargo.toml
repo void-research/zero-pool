@@ -8,7 +8,6 @@ description = "High-performance thread pool with consistent low-latency task dis
 repository = "https://github.com/void-research/zero-pool"
 keywords = ["threadpool", "performance", "parallel", "concurrency", "lockfree"]
 categories = ["concurrency"]
-readme = "README.md"
 exclude = [
     ".gitignore",
     "rust-toolchain.toml",
