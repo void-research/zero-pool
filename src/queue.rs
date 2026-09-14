@@ -54,7 +54,7 @@ impl Queue {
         &self,
         task_fn: fn(&T),
         params: *const [T],
-        waiter: Option<(*const AtomicUsize, Thread)>,
+        waiter: Option<(*const AtomicUsize, *const Thread)>,
     ) {
         let count = params.len();
         if count == 0 {
