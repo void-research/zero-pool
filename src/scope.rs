@@ -1,7 +1,6 @@
 use crate::queue::Queue;
 use crate::task_batch::TaskBatch;
 use std::marker::PhantomData;
-use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread::{self, Thread};
 
@@ -34,7 +33,7 @@ impl<'scope, 'env> Scope<'scope, 'env> {
                 TaskBatch::new(
                     task_fn,
                     params,
-                    Some((&raw const self.counter, NonNull::from(&self.thread))),
+                    Some((&raw const self.counter, self.thread.clone())),
                 )
             };
             self.queue.enqueue(batch, params.len());
