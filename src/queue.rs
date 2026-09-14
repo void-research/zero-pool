@@ -1,7 +1,6 @@
 use crate::retired_list::RetiredList;
 use crate::task_batch::TaskBatch;
-use crate::{PaddedType, TaskFnPointer, TaskParamPointer};
-use std::ptr::NonNull;
+use crate::{PaddedType, TaskParamPointer};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicUsize, Ordering, fence};
 use std::thread::{self, Thread};
@@ -26,8 +25,7 @@ pub struct Queue {
 
 impl Queue {
     pub fn new(worker_count: usize) -> Self {
-        fn noop(_: TaskParamPointer) {}
-        let anchor = TaskBatch::new(noop, NonNull::dangling(), 0, 0, None);
+        let anchor = unsafe { TaskBatch::new(|(): &()| {}, &[], None) };
 
         let local_epochs = (0..worker_count)
             .map(|_| PaddedType(AtomicUsize::new(NOT_IN_CRITICAL)))
@@ -50,29 +48,7 @@ impl Queue {
         }
     }
 
-    pub unsafe fn push_task_batch<T>(
-        &self,
-        task_fn: fn(&T),
-        params: *const [T],
-        waiter: Option<(*const AtomicUsize, *const Thread)>,
-    ) {
-        let count = params.len();
-        if count == 0 {
-            return;
-        }
-
-        let batch = TaskBatch::new(
-            unsafe { std::mem::transmute::<fn(&T), TaskFnPointer>(task_fn) },
-            unsafe { NonNull::new_unchecked(params.cast::<T>().cast_mut()) }.cast(),
-            std::mem::size_of::<T>(),
-            std::mem::size_of::<T>() * count,
-            waiter,
-        );
-
-        self.enqueue_batch(batch, count);
-    }
-
-    fn enqueue_batch(&self, batch: *mut TaskBatch, count: usize) {
+    pub fn enqueue(&self, batch: *mut TaskBatch, count: usize) {
         let prev_tail = self.tail.swap(batch, Ordering::Release);
         unsafe {
             (*prev_tail).next.store(batch, Ordering::Release);

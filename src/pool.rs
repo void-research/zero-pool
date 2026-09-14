@@ -1,6 +1,7 @@
 use crate::{
     queue::Queue,
     scope::{Scope, ScopeGuard},
+    task_batch::TaskBatch,
     worker::spawn_worker,
 };
 use std::{
@@ -122,8 +123,9 @@ impl ZeroPool {
     /// The caller must ensure that `params` remains valid until all tasks finish.
     #[inline]
     pub unsafe fn run_detached<T>(&self, task_fn: fn(&T), params: *const [T]) {
-        unsafe {
-            self.queue.push_task_batch(task_fn, params, None);
+        if !params.is_empty() {
+            let batch = unsafe { TaskBatch::new(task_fn, params, None) };
+            self.queue.enqueue(batch, params.len());
         }
     }
 }

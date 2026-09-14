@@ -1,5 +1,7 @@
 use crate::queue::Queue;
+use crate::task_batch::TaskBatch;
 use std::marker::PhantomData;
+use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread::{self, Thread};
 
@@ -8,8 +10,8 @@ use std::thread::{self, Thread};
 /// Tasks are guaranteed to complete before [`ZeroPool::scope`](crate::ZeroPool::scope)
 /// returns, even on panic.
 pub struct Scope<'scope, 'env: 'scope> {
-    queue: &'env Queue,
     counter: AtomicUsize,
+    queue: &'env Queue,
     thread: Thread,
     _marker: PhantomData<(&'scope mut &'scope (), &'env mut &'env ())>,
 }
@@ -17,8 +19,8 @@ pub struct Scope<'scope, 'env: 'scope> {
 impl<'scope, 'env> Scope<'scope, 'env> {
     pub(crate) fn new(queue: &'env Queue) -> Self {
         Self {
-            queue,
             counter: AtomicUsize::new(0),
+            queue,
             thread: thread::current(),
             _marker: PhantomData,
         }
@@ -27,16 +29,16 @@ impl<'scope, 'env> Scope<'scope, 'env> {
     /// Submits tasks to the pool within this scope.
     #[inline]
     pub fn run<T: 'scope>(&self, task_fn: fn(&T), params: &'scope [T]) {
-        if params.is_empty() {
-            return;
-        }
-        self.counter.fetch_add(params.len(), Ordering::Relaxed);
-        unsafe {
-            self.queue.push_task_batch(
-                task_fn,
-                params,
-                Some((&raw const self.counter, &raw const self.thread)),
-            );
+        if !params.is_empty() {
+            self.counter.fetch_add(params.len(), Ordering::Relaxed);
+            let batch = unsafe {
+                TaskBatch::new(
+                    task_fn,
+                    params,
+                    Some((&raw const self.counter, NonNull::from(&self.thread))),
+                )
+            };
+            self.queue.enqueue(batch, params.len());
         }
     }
 

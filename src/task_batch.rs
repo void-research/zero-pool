@@ -1,3 +1,4 @@
+use std::ptr::NonNull;
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::thread::Thread;
 
@@ -10,7 +11,7 @@ pub struct TaskBatch {
     params_ptr: TaskParamPointer,
     param_stride: usize,
     params_total_bytes: usize,
-    waiter: Option<(*const AtomicUsize, *const Thread)>,
+    waiter: Option<(*const AtomicUsize, NonNull<Thread>)>,
     // used only by thread that takes ownership for reclamation
     // but because of retagging/aliasing rules needs either unsafecell or atomic to pass MIRI.
     // should be the same machine instruction regardless of choice with Relaxed ordering.
@@ -19,20 +20,19 @@ pub struct TaskBatch {
 }
 
 impl TaskBatch {
-    pub fn new(
-        fn_ptr: TaskFnPointer,
-        params_ptr: TaskParamPointer,
-        param_stride: usize,
-        params_total_bytes: usize,
-        waiter: Option<(*const AtomicUsize, *const Thread)>,
+    #[inline]
+    pub unsafe fn new<T>(
+        task_fn: fn(&T),
+        params: *const [T],
+        waiter: Option<(*const AtomicUsize, NonNull<Thread>)>,
     ) -> *mut Self {
-        Box::into_raw(Box::new(TaskBatch {
+        Box::into_raw(Box::new(Self {
             next_byte_offset: PaddedType(AtomicUsize::new(0)),
             next: PaddedType(AtomicPtr::new(std::ptr::null_mut())),
-            fn_ptr,
-            params_ptr,
-            param_stride,
-            params_total_bytes,
+            fn_ptr: unsafe { std::mem::transmute::<fn(&T), TaskFnPointer>(task_fn) },
+            params_ptr: unsafe { NonNull::new_unchecked(params.cast::<T>().cast_mut()).cast() },
+            param_stride: std::mem::size_of::<T>(),
+            params_total_bytes: std::mem::size_of::<T>() * params.len(),
             waiter,
             retired_epoch: AtomicUsize::new(0),
             retired_next: AtomicPtr::new(std::ptr::null_mut()),
@@ -43,7 +43,7 @@ impl TaskBatch {
         if let Some((counter, thread)) = self.waiter
             && unsafe { (*counter).fetch_sub(count, Ordering::Release) } == count
         {
-            unsafe { (*thread).unpark() };
+            unsafe { thread.as_ref().unpark() };
         }
     }
 
