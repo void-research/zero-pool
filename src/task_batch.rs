@@ -20,7 +20,6 @@ pub struct TaskBatch {
 }
 
 impl TaskBatch {
-    #[inline]
     pub unsafe fn new<T>(
         task_fn: fn(&T),
         params: *const [T],

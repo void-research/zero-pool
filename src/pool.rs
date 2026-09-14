@@ -88,7 +88,6 @@ impl ZeroPool {
     /// assert_eq!(r1, 20);
     /// assert_eq!(r2, 40);
     /// ```
-    #[inline]
     pub fn scope<'env, F, R>(&'env self, f: F) -> R
     where
         F: for<'scope> FnOnce(&'scope Scope<'scope, 'env>) -> R,
@@ -111,7 +110,6 @@ impl ZeroPool {
     /// pool.run(compute, &[Params { value: 42, result: &raw mut result }]);
     /// assert_eq!(result, 84);
     /// ```
-    #[inline]
     pub fn run<T>(&self, task_fn: fn(&T), params: &[T]) {
         self.scope(|s| s.run(task_fn, params));
     }
@@ -121,7 +119,6 @@ impl ZeroPool {
     /// # Safety
     ///
     /// The caller must ensure that `params` remains valid until all tasks finish.
-    #[inline]
     pub unsafe fn run_detached<T>(&self, task_fn: fn(&T), params: *const [T]) {
         if !params.is_empty() {
             let batch = unsafe { TaskBatch::new(task_fn, params, None) };
