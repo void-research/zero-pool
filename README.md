@@ -23,7 +23,7 @@ Using a result-via-parameters pattern means workers place results into caller pr
 - Zero-Pool supports both explicitly creating new thread pools (`ZeroPool::new`, `ZeroPool::with_workers`) and using the global instance (`zero_pool::global_pool`).
 
 ## Benchmarks (AMD 5900X, Linux 7.1)
-```rust
+```text
 rayon_heavy_compute        .  4,840,907.85 ns/iter (+/- 611,638.71)
 zeropool_heavy_compute     .  4,438,862.85 ns/iter (+/- 361,219.10)
 rayon_individual_tasks     .    779,474.28 ns/iter (+/- 56,782.54)
@@ -87,10 +87,13 @@ let pool = ZeroPool::new();
 let mut compute_result = 0;
 let mut multiply_result = 0;
 
+let compute_params = [ComputeParams { work_amount: 1000, result: &raw mut compute_result }];
+let multiply_params = [MultiplyParams { x: 6, y: 7, result: &raw mut multiply_result }];
+
 pool.scope(|s| {
     // Both tasks are queued and execute in parallel
-    s.run(compute_task, &[ComputeParams { work_amount: 1000, result: &raw mut compute_result }]);
-    s.run(multiply_task, &[MultiplyParams { x: 6, y: 7, result: &raw mut multiply_result }]);
+    s.run(compute_task, &compute_params);
+    s.run(multiply_task, &multiply_params);
 });
 
 println!("Compute: {}, Multiply: {}", compute_result, multiply_result);
@@ -116,7 +119,7 @@ use zero_pool::global_pool;
 
 struct Params { work: usize, result: *mut u64 }
 fn task(p: &Params) {
-    let mut sum = 0;
+    let mut sum: u64 = 0;
     for i in 0..p.work { sum = sum.wrapping_add(i as u64); }
     unsafe { *p.result = sum; }
 }

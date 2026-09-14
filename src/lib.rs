@@ -1,7 +1,6 @@
 //! # Zero-Pool
 //!
 //! High-performance thread pool with:
-//! - Safe scoped task execution without per-task heap allocation
 //! - Lock-free MPMC queue with epoch-based memory reclamation
 //! - Function pointer dispatch (no trait objects / virtual dispatch)
 //! - Zero external dependencies
