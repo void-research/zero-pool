@@ -6,8 +6,7 @@ use std::thread::{self, Thread};
 
 /// A scope for spawning concurrent tasks that borrow from the local stack.
 ///
-/// Tasks are guaranteed to complete before [`ZeroPool::scope`](crate::ZeroPool::scope)
-/// returns, even on panic.
+/// All submitted tasks are guaranteed to complete before the scope exits.
 pub struct Scope<'scope, 'env: 'scope> {
     counter: AtomicUsize,
     queue: &'env Queue,

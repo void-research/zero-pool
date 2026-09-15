@@ -12,11 +12,11 @@ A FIFO MPMC thread pool with a single global queue and cooperative memory reclam
 - **Zero virtual dispatch** - function pointer dispatch avoids vtable lookups
 - **Zero core spinning** - all event-based
 - **Zero result transport cost** - tasks write directly to caller-provided memory
-- **Zero per worker queues** - single global queue structure = perfect workload balancing
-- **Zero external dependencies** - standard library only and stable rust
+- **Zero per-worker queues** - single global queue structure = perfect workload balancing
+- **Zero external dependencies** - standard library only and stable Rust
 - **Zero heap tracking overhead** - scoped tasks synchronize via stack-allocated counters (no `Arc` per task)
 
-Using a result-via-parameters pattern means workers place results into caller provided memory, removing thread transport overhead. The single global queue structure ensures optimal load balancing without the complexity of work-stealing or load redistribution algorithms.
+Using a result-via-parameters pattern means workers place results into caller-provided memory, removing thread transport overhead. The single global queue structure ensures optimal load balancing without the complexity of work-stealing or load redistribution algorithms.
 
 #### Notes
 - **`pool.run_detached`** allows fire-and-forget background tasks without waiting.
@@ -56,7 +56,7 @@ println!("First result: {}", results[0]);
 
 ### Scoped Concurrent Tasks
 
-Submit tasks of different types concurrently within a scope. All tasks are joined at scope exit:
+Submit tasks of different types concurrently within a scope. All submitted tasks complete before the scope returns:
 
 ```rust
 use zero_pool::ZeroPool;
@@ -94,6 +94,9 @@ println!("Compute: {}, Multiply: {}", compute_result, multiply_result);
 Call `s.wait()` mid-scope to synchronize between computation phases:
 
 ```rust
+let phase1_params = [Phase1Params { ... }];
+let phase2_params = [Phase2Params { ... }];
+
 pool.scope(|s| {
     s.run(phase1_task, &phase1_params);
     s.wait();

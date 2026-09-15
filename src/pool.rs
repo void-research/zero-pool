@@ -21,7 +21,7 @@ pub struct ZeroPool {
 }
 
 impl ZeroPool {
-    /// Creates a new thread pool with worker count equal to available parallelism
+    /// Creates a new thread pool with worker count equal to available parallelism.
     ///
     /// Worker count is determined by `std::thread::available_parallelism()`,
     /// falling back to 1 if unavailable. This is usually the optimal choice
@@ -39,7 +39,7 @@ impl ZeroPool {
         Self::with_workers(worker_count)
     }
 
-    /// Creates a new thread pool with the specified number of workers
+    /// Creates a new thread pool with the specified number of workers.
     ///
     /// Use this when you need precise control over the worker count,
     /// for example when coordinating with other thread pools or
@@ -70,7 +70,9 @@ impl ZeroPool {
 
     /// Creates a scope for executing concurrent tasks that can borrow from the stack.
     ///
-    /// All tasks are guaranteed to complete before `scope` returns, even on panic.
+    /// All tasks are guaranteed to complete before `scope` returns.
+    ///
+    /// # Examples
     ///
     /// ```rust
     /// use zero_pool::ZeroPool;
