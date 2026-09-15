@@ -22,16 +22,6 @@ Using a result-via-parameters pattern means workers place results into caller pr
 - **`pool.run_detached`** allows fire-and-forget background tasks without waiting.
 - Zero-Pool supports both explicitly creating new thread pools (`ZeroPool::new`, `ZeroPool::with_workers`) and using the global instance (`zero_pool::global_pool`).
 
-## Benchmarks (AMD 5900X, Linux 7.1)
-```text
-rayon_heavy_compute        .  4,840,907.85 ns/iter (+/- 611,638.71)
-zeropool_heavy_compute     .  4,438,862.85 ns/iter (+/- 361,219.10)
-rayon_individual_tasks     .    779,474.28 ns/iter (+/- 56,782.54)
-zeropool_individual_tasks  .  1,043,626.32 ns/iter (+/- 91,674.50)
-rayon_task_overhead        .     30,815.31 ns/iter (+/- 2,444.29)
-zeropool_task_overhead     .     31,169.77 ns/iter (+/- 2,899.86)
-```
-
 ## Example Usage
 
 ### Running Tasks
