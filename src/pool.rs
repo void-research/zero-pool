@@ -10,6 +10,11 @@ use std::{
     thread::{self, JoinHandle},
 };
 
+/// A high-performance thread pool with lock-free task dispatch.
+///
+/// `ZeroPool` coordinates tasks across worker threads using a single lock-free
+/// FIFO queue and cooperative memory reclamation. Tasks write their results
+/// directly to caller-provided memory via function pointers without virtual dispatch.
 pub struct ZeroPool {
     queue: Arc<Queue>,
     workers: Box<[JoinHandle<()>]>,
