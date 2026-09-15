@@ -26,6 +26,7 @@ impl<'scope, 'env> Scope<'scope, 'env> {
     }
 
     /// Submits tasks to the pool within this scope.
+    #[inline]
     pub fn run<T: 'scope>(&self, task_fn: fn(&T), params: &'scope [T]) {
         if !params.is_empty() {
             self.counter.fetch_add(params.len(), Ordering::Relaxed);
